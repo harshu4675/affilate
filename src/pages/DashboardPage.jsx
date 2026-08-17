@@ -19,7 +19,7 @@ const HISTORY_STATUS = {
 export function DashboardPage() {
   const navigate = useNavigate();
   const toast = useToast();
-  const { products, history, setDraft, addHistory } = useApp();
+  const { products, history, draft, setDraft, addHistory } = useApp();
 
   const stats = STATUSES.map((status) => ({
     status,
@@ -30,16 +30,20 @@ export function DashboardPage() {
 
   const handleExtracted = (data) => {
     const product = createProductFromExtraction(data);
-    setDraft(product);
+    const stored = setDraft(product);
+    if (!stored.ok) {
+      toast.error(stored.message || 'The extracted draft could not be stored.');
+      return;
+    }
     addHistory({
       url: data.source.url,
       platform: data.source.platform,
-      status: data.partial ? 'partial' : 'success',
+      status: data.source.partial ? 'partial' : 'success',
       productId: product.id,
       title: product.title || data.source.url,
       extractedAt: new Date().toISOString()
     });
-    if (data.partial) {
+    if (data.source.partial) {
       toast.warning('Product extracted with partial data. Review the missing fields before saving.');
     } else {
       toast.success('Product extracted. Review and save it.');
@@ -59,7 +63,11 @@ export function DashboardPage() {
   };
 
   const handleManual = () => {
-    setDraft(createEmptyProduct());
+    const stored = setDraft(createEmptyProduct());
+    if (!stored.ok) {
+      toast.error(stored.message || 'A new draft could not be created.');
+      return;
+    }
     navigate('/products/new');
   };
 
@@ -113,6 +121,14 @@ export function DashboardPage() {
               {history.slice(0, 6).map((entry) => {
                 const meta = HISTORY_STATUS[entry.status] || HISTORY_STATUS.failed;
                 const platform = getPlatform(entry.platform);
+                const linkedProduct = entry.productId ? products.find((product) => product.id === entry.productId) : null;
+                const linkedDraft = !linkedProduct && draft && draft.id === entry.productId ? draft : null;
+                const displayTitle = linkedProduct
+                  ? linkedProduct.title || 'Untitled product'
+                  : linkedDraft
+                    ? linkedDraft.title || 'Untitled product'
+                    : entry.title;
+                const target = linkedProduct ? `/products/${linkedProduct.id}` : linkedDraft ? '/products/new' : '';
                 return (
                   <li className="history-item" key={entry.id}>
                     <span className="history-platform">
@@ -123,16 +139,16 @@ export function DashboardPage() {
                       )}
                     </span>
                     <div className="history-main">
-                      <span className="history-title" title={entry.title}>
-                        {entry.title}
+                      <span className="history-title" title={displayTitle}>
+                        {displayTitle}
                       </span>
                       <span className="history-url">{displayUrl(entry.url, 56)}</span>
                     </div>
                     <span className="history-time">{timeAgo(entry.extractedAt)}</span>
                     <span className={`history-status badge badge-${meta.tone}`}>{meta.label}</span>
-                    {entry.productId && (
+                    {target && (
                       <Link
-                        to={`/products/${entry.productId}`}
+                        to={target}
                         className="icon-btn icon-btn-sm"
                         aria-label="Open product"
                         title="Open product"

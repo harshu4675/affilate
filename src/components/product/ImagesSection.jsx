@@ -6,11 +6,13 @@ import { Input } from '../ui/Input.jsx';
 import { useToast } from '../ui/ToastProvider.jsx';
 import { compressImageFile, isValidImageSource } from '../../services/imageService.js';
 import { createId } from '../../utils/id.js';
+import { SafeImage } from '../ui/SafeImage.jsx';
 
 export function ImagesSection({ product, onChange, onPreview }) {
   const toast = useToast();
   const [urlInput, setUrlInput] = useState('');
   const [addingUrl, setAddingUrl] = useState(false);
+  const [replacingId, setReplacingId] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [dragIndex, setDragIndex] = useState(null);
   const fileRef = useRef(null);
@@ -27,7 +29,9 @@ export function ImagesSection({ product, onChange, onPreview }) {
     const next = [...images];
     const [item] = next.splice(from, 1);
     next.splice(to, 0, item);
-    applyImages(next.map((image, index) => ({ ...image, position: index, isPrimary: index === 0 ? true : image.isPrimary })));
+    const ordered = next.map((image, index) => ({ ...image, position: index }));
+    if (ordered.length > 0 && !ordered.some((image) => image.isPrimary)) ordered[0].isPrimary = true;
+    applyImages(ordered);
   };
 
   const remove = (image) => {
@@ -60,11 +64,17 @@ export function ImagesSection({ product, onChange, onPreview }) {
       toast.error('Enter a valid image URL (http or https).');
       return;
     }
-    const image = { id: createId('img'), url: value, alt: '', position: images.length, isPrimary: images.length === 0, source: 'user' };
-    applyImages([...images, image]);
+    if (replacingId) {
+      applyImages(images.map((image) => (image.id === replacingId ? { ...image, url: value, source: 'user' } : image)));
+      toast.success('Image replaced.');
+    } else {
+      const image = { id: createId('img'), url: value, alt: '', position: images.length, isPrimary: images.length === 0, source: 'user' };
+      applyImages([...images, image]);
+      toast.success('Image added.');
+    }
     setUrlInput('');
+    setReplacingId(null);
     setAddingUrl(false);
-    toast.success('Image added.');
   };
 
   const handleUpload = async (files) => {
@@ -114,7 +124,7 @@ export function ImagesSection({ product, onChange, onPreview }) {
               onDragEnd={() => setDragIndex(null)}
             >
               <button type="button" className="image-tile-preview" onClick={() => onPreview(image)}>
-                <img src={image.url} alt={image.alt || 'Product image'} loading="lazy" decoding="async" />
+                <SafeImage src={image.url} alt={image.alt || 'Product image'} />
               </button>
               {image.isPrimary && (
                 <span className="image-tile-primary-badge" title="Primary image">
@@ -125,6 +135,16 @@ export function ImagesSection({ product, onChange, onPreview }) {
                 <IconButton name="chevronUp" label="Move earlier" size="sm" onClick={() => move(index, index - 1)} disabled={index === 0} />
                 <IconButton name="chevronDown" label="Move later" size="sm" onClick={() => move(index, index + 1)} disabled={index === images.length - 1} />
                 <IconButton name="star" label="Set as primary image" size="sm" onClick={() => setPrimary(image.id)} />
+                <IconButton
+                  name="edit"
+                  label="Replace image by URL"
+                  size="sm"
+                  onClick={() => {
+                    setReplacingId(image.id);
+                    setUrlInput(image.url);
+                    setAddingUrl(true);
+                  }}
+                />
                 <IconButton name="trash" label="Remove image" size="sm" onClick={() => remove(image)} />
               </div>
             </div>
@@ -138,7 +158,7 @@ export function ImagesSection({ product, onChange, onPreview }) {
           <div className="removed-images-list">
             {removedImages.map((image) => (
               <div className="removed-image" key={image.id}>
-                <img src={image.url} alt="" loading="lazy" />
+                <SafeImage src={image.url} alt="Removed product image" />
                 <Button variant="ghost" size="sm" icon="undo" onClick={() => restore(image)}>
                   Restore
                 </Button>
@@ -166,15 +186,32 @@ export function ImagesSection({ product, onChange, onPreview }) {
               autoFocus
             />
             <Button size="sm" onClick={addByUrl}>
-              Add
+              {replacingId ? 'Replace' : 'Add'}
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => setAddingUrl(false)}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setAddingUrl(false);
+                setReplacingId(null);
+                setUrlInput('');
+              }}
+            >
               Cancel
             </Button>
           </div>
         ) : (
           <>
-            <Button variant="secondary" size="sm" icon="link" onClick={() => setAddingUrl(true)}>
+            <Button
+              variant="secondary"
+              size="sm"
+              icon="link"
+              onClick={() => {
+                setReplacingId(null);
+                setUrlInput('');
+                setAddingUrl(true);
+              }}
+            >
               Add by URL
             </Button>
             <Button

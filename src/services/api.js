@@ -26,7 +26,8 @@ export async function extractProduct(url, { timeoutMs = 25000, signal } = {}) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url }),
-      signal: controller.signal
+      signal: controller.signal,
+      cache: 'no-store'
     });
     let body;
     try {
@@ -38,6 +39,9 @@ export async function extractProduct(url, { timeoutMs = 25000, signal } = {}) {
       const error = (body && body.error) || { code: 'http_error', message: `Extraction failed (${response.status}).`, retryable: response.status >= 500 };
       error.status = response.status;
       throw error;
+    }
+    if (!body.data || !body.data.product || !body.data.source || typeof body.data.product !== 'object') {
+      throw { code: 'network_error', message: 'The extraction service returned an incomplete product response.', retryable: true, status: response.status };
     }
     return body.data;
   } catch (err) {

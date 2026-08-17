@@ -183,7 +183,7 @@
   }
 
   .image-grid {
-    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   }
 
   .extraction-error {
@@ -210,6 +210,20 @@
 
   .bulk-actions {
     justify-content: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .icon-spin,
+  .conn-checking .connection-dot,
+  .modal,
+  .toast,
+  .safe-image-loading {
+    animation: none;
   }
 }
 

@@ -5,17 +5,19 @@ import { PlatformBadge, StatusBadge, DiscountBadge } from '../ui/Badge.jsx';
 import { Icon } from '../icons/Icons.jsx';
 import { formatCurrency } from '../../utils/format.js';
 import { displayUrl, safeExternalHref } from '../../utils/url.js';
+import { SafeImage } from '../ui/SafeImage.jsx';
 
 export function ViewProductModal({ product, onClose, onCopyLink }) {
   const navigate = useNavigate();
   if (!product) return null;
   const href = safeExternalHref(product.source && product.source.url);
+  const primary = (product.images || []).find((image) => image.isPrimary) || (product.images || [])[0];
   return (
     <Modal open onClose={onClose} title="Product details" width="md">
       <div className="view-product">
         <div className="view-product-media">
-          {product.images && product.images[0] ? (
-            <img src={product.images[0].url} alt="" />
+          {primary ? (
+            <SafeImage src={primary.url} alt={product.title || 'Product'} loading="eager" />
           ) : (
             <div className="view-product-media-empty">
               <Icon name="image" size={24} />

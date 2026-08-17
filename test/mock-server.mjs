@@ -28,6 +28,11 @@ const PRODUCT_JSON = {
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');
+  if (url.pathname === '/short-product') {
+    res.writeHead(302, { Location: '/generic.html?utm_source=redirect' });
+    res.end();
+    return;
+  }
   if (url.pathname === '/products/cloudpuff-blanket.js') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(PRODUCT_JSON));

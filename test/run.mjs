@@ -12,8 +12,10 @@ import { genericAdapter } from '../server/extraction/adapters/generic.js';
 import { normalizeProduct, analyzeCoverage } from '../server/extraction/normalize.js';
 import { runExtraction } from '../server/extraction/pipeline.js';
 import { detectPlatform } from '../server/extraction/detect.js';
-import { normalizeUrl } from '../server/extraction/url.js';
+import { normalizeUrl, extractAmazonProductId } from '../server/extraction/url.js';
 import { fetchJson } from '../server/extraction/fetch.js';
+import { createProductFromExtraction } from '../src/state/productFactory.js';
+import { loadAppState, saveAppState } from '../src/services/storage.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixtures = (name) => fs.readFileSync(path.join(__dirname, 'fixtures', name), 'utf8');
@@ -101,6 +103,20 @@ check('shopify: compare at', near(shopify.originalPrice, 49.99), String(shopify.
 check('shopify: brand', shopify.brand === 'CloudPuff', shopify.brand);
 check('shopify: variants', shopify.variants.length === 3, String(shopify.variants.length));
 check('shopify: images absolute', shopify.images[0].startsWith('https:'), shopify.images[0]);
+const shopifyCents = await shopifyAdapter.extract({
+  url: 'https://shop.example/products/cents',
+  platform: { id: 'shopify' },
+  fetchJson: async () => ({
+    json: {
+      title: 'Cents product',
+      handle: 'cents',
+      variants: [{ title: 'Default', price: 34500, compare_at_price: 39900, available: true }],
+      images: []
+    }
+  })
+});
+check('shopify: integer cents price', near(shopifyCents.price, 345), String(shopifyCents.price));
+check('shopify: integer cents compare at', near(shopifyCents.originalPrice, 399), String(shopifyCents.originalPrice));
 
 const normalized = normalizeProduct(amazon, { platform: 'amazon', url: 'https://www.amazon.com/dp/B0TEST1234', finalUrl: 'https://www.amazon.com/dp/B0TEST1234' });
 const analysis = analyzeCoverage(normalized);
@@ -112,11 +128,20 @@ const detection = detectPlatform('https://www.amazon.co.uk/dp/B0TEST');
 check('detect: amazon.co.uk', detection.id === 'amazon', detection.id);
 const detection2 = detectPlatform('https://shop.example/products/thing');
 check('detect: shopify path', detection2.id === 'shopify', detection2.id);
+const detection3 = detectPlatform('https://amzn.in/d/AbCd123');
+check('detect: amazon short link', detection3.id === 'amazon', detection3.id);
 
 const normUrl = normalizeUrl('https://www.Amazon.com/dp/B0TEST?utm_source=x&tag=aff-20&th=1');
 check('url: normalized', normUrl.ok && normUrl.url === 'https://www.amazon.com/dp/B0TEST?th=1', normUrl.url);
 const normUrl2 = normalizeUrl('example.com/product/123?utm_medium=cpc');
 check('url: protocol added', normUrl2.ok && normUrl2.url.startsWith('https://'), normUrl2.url);
+const amazonGp = normalizeUrl('https://www.amazon.in/gp/product/B07WDKWJ7W?tag=partner-21&psc=1');
+check('url: amazon gp canonical', amazonGp.ok && amazonGp.url === 'https://www.amazon.in/dp/B07WDKWJ7W', amazonGp.url);
+const amazonSlug = normalizeUrl('https://amazon.in/example-product-name/dp/B07WDKWJ7W/ref=sr_1_1?utm_source=x');
+check('url: amazon slug canonical', amazonSlug.ok && amazonSlug.url === 'https://amazon.in/dp/B07WDKWJ7W', amazonSlug.url);
+check('url: amazon ASIN', extractAmazonProductId('https://www.amazon.co.uk/gp/aw/d/B0ABC12345') === 'B0ABC12345');
+const amazonShort = normalizeUrl('https://amzn.in/d/AbCd123?tag=ignored');
+check('url: amazon short recognized', amazonShort.ok && amazonShort.shortUrl === true && amazonShort.url === 'https://amzn.in/d/AbCd123');
 
 const badProtocol = await runExtraction({ url: 'ftp://example.com/file', allowLocal: true });
 check('pipeline: unsupported protocol', badProtocol.ok === false && badProtocol.error.code === 'unsupported_platform', badProtocol.error && badProtocol.error.code);
@@ -133,6 +158,13 @@ if (genericPipeline.ok) {
   check('pipeline: generic platform', genericPipeline.data.source.platform === 'generic', genericPipeline.data.source.platform);
   check('pipeline: generic price', near(genericPipeline.data.product.price, 54), String(genericPipeline.data.product.price));
   check('pipeline: generic currency', genericPipeline.data.product.currency === 'EUR', genericPipeline.data.product.currency);
+}
+
+const redirectPipeline = await runExtraction({ url: 'http://127.0.0.1:8799/short-product', allowLocal: true });
+check('pipeline: shortened redirect ok', redirectPipeline.ok === true, redirectPipeline.error && redirectPipeline.error.code);
+if (redirectPipeline.ok) {
+  check('pipeline: shortened redirect final URL', redirectPipeline.data.source.finalUrl.includes('/generic.html'), redirectPipeline.data.source.finalUrl);
+  check('pipeline: shortened redirect tracked', redirectPipeline.diagnostics.redirects.length === 1, String(redirectPipeline.diagnostics.redirects.length));
 }
 
 const shopifyPipeline = await runExtraction({ url: 'http://127.0.0.1:8799/products/cloudpuff-blanket', allowLocal: true });
@@ -155,6 +187,25 @@ if (partialPipeline.ok) {
 
 const localBlockedDev = await runExtraction({ url: 'http://127.0.0.1:8799/generic.html', allowLocal: false });
 check('pipeline: private ip blocked when not dev', localBlockedDev.ok === false, localBlockedDev.error && localBlockedDev.error.code);
+
+const memoryStorage = new Map();
+globalThis.localStorage = {
+  getItem: (key) => (memoryStorage.has(key) ? memoryStorage.get(key) : null),
+  setItem: (key, value) => memoryStorage.set(key, String(value)),
+  removeItem: (key) => memoryStorage.delete(key)
+};
+if (genericPipeline.ok) {
+  const savedProduct = createProductFromExtraction(genericPipeline.data);
+  const initialSave = saveAppState({ products: [{ ...savedProduct, status: 'ready' }], history: [], draft: null });
+  check('persistence: extracted product saved', initialSave.ok === true);
+  const reloaded = loadAppState();
+  check('persistence: product survives reload', reloaded.products.length === 1 && reloaded.products[0].id === savedProduct.id);
+  const edited = { ...reloaded.products[0], title: 'Edited persisted title', updatedAt: new Date().toISOString() };
+  saveAppState({ ...reloaded, products: [edited] });
+  check('persistence: edit survives reload', loadAppState().products[0].title === 'Edited persisted title');
+  saveAppState({ ...reloaded, products: [] });
+  check('persistence: delete updates count', loadAppState().products.length === 0);
+}
 
 mock.kill('SIGTERM');
 
