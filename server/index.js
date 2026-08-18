@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { runExtraction } from './extraction/pipeline.js';
 import { createRateLimiter } from './rateLimit.js';
+import { createCatalogRouter } from './catalog/routes.js';
+import { adminCredentials } from './auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = process.env.AFFILATE_DEV === '1';
@@ -11,6 +13,7 @@ const PORT = Number(process.env.PORT || 8787);
 const RATE_MAX = Number(process.env.AFFILATE_RATE_MAX || (isDev ? 120 : 30));
 
 const limiter = createRateLimiter({ windowMs: 60000, max: RATE_MAX });
+const loginLimiter = createRateLimiter({ windowMs: 60000, max: Number(process.env.AFFILATE_LOGIN_RATE_MAX || 10) });
 const diagnosticsLog = [];
 const debugEnabled = isDev || process.env.AFFILATE_DEBUG === '1';
 const allowedOrigins = new Set(
@@ -27,17 +30,24 @@ app.use((req, res, next) => {
   if (origin && allowedOrigins.has(origin)) {
     res.set('access-control-allow-origin', origin);
     res.set('vary', 'Origin');
-    res.set('access-control-allow-methods', 'GET,POST,OPTIONS');
+    res.set('access-control-allow-methods', 'GET,POST,PATCH,DELETE,OPTIONS');
     res.set('access-control-allow-headers', 'content-type');
+    res.set('access-control-allow-credentials', 'true');
   }
   if (req.method === 'OPTIONS') return res.sendStatus(origin && allowedOrigins.has(origin) ? 204 : 403);
   return next();
 });
+// Publishing sends whole product records (including images), so it needs a
+// larger body than the extraction endpoint. Extraction keeps its 32kb limit.
+app.use('/api/admin/publish', express.json({ limit: process.env.AFFILATE_PUBLISH_LIMIT || '8mb' }));
 app.use(express.json({ limit: '32kb' }));
 app.use('/api', (req, res, next) => {
   res.set('cache-control', 'no-store');
   next();
 });
+
+// Storefront catalog + admin management API (additive; extraction is untouched).
+app.use('/api', createCatalogRouter({ loginLimiter }));
 
 app.get('/api/health', (req, res) => {
   res.json({
@@ -123,4 +133,7 @@ if (!isDev && fs.existsSync(distPath)) {
 app.listen(PORT, '0.0.0.0', () => {
   const mode = isDev ? 'development' : 'production';
   console.log(`[affilate] extraction API listening on http://0.0.0.0:${PORT} (${mode})`);
+  if (adminCredentials().usingDefaults) {
+    console.warn('[affilate] ADMIN_PASSWORD is not set - using the development default. Set ADMIN_USERNAME/ADMIN_PASSWORD in production.');
+  }
 });

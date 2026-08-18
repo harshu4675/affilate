@@ -24,7 +24,7 @@ export function AppShell() {
         <Outlet />
       </main>
       <footer className="app-footer">
-        <span>Affilate - Affiliate product importer</span>
+        <span>Talishh admin workspace - product importer</span>
         <span className="app-footer-note">Product data is stored locally in your browser.</span>
       </footer>
     </div>

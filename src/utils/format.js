@@ -13,6 +13,36 @@ export function formatCurrency(value, currency) {
   }
 }
 
+const PRICE_LOCALES = { INR: 'en-IN', GBP: 'en-GB', EUR: 'de-DE', JPY: 'ja-JP' };
+
+/**
+ * Storefront price formatting: locale-aware, and drops trailing ".00" so
+ * product cards stay compact on small screens.
+ */
+export function formatPrice(value, currency) {
+  if (value == null || value === '') return '';
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '';
+  const code = (currency || '').toUpperCase();
+  const fractionDigits = Number.isInteger(num) ? 0 : 2;
+  try {
+    if (!code) {
+      return new Intl.NumberFormat('en-US', {
+        minimumFractionDigits: fractionDigits,
+        maximumFractionDigits: fractionDigits
+      }).format(num);
+    }
+    return new Intl.NumberFormat(PRICE_LOCALES[code] || 'en-US', {
+      style: 'currency',
+      currency: code,
+      minimumFractionDigits: fractionDigits,
+      maximumFractionDigits: fractionDigits
+    }).format(num);
+  } catch {
+    return `${code} ${num}`.trim();
+  }
+}
+
 export function formatDate(iso) {
   if (!iso) return '';
   const date = new Date(iso);

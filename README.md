@@ -1,12 +1,41 @@
-# Affilate
+# Talishh
 
-Affiliate product importer and product extraction app. Paste a product URL, extract the real product data from the store, review and edit every field, then save it to your product library.
+Affiliate product discovery platform built on the Affilate extraction engine.
 
-The workflow is intentionally simple:
+The app has three clearly separated surfaces:
 
-**Paste link → Extract → Preview → Edit → Validate → Save**
+| Surface | Route | Who | Purpose |
+| --- | --- | --- | --- |
+| **Talishh storefront** | `#/` | Public visitors | Browse the catalog, open a product, buy via the affiliate/store link |
+| **Admin panel** | `#/admin` | Admin only (session protected) | Dashboard, product management, publish to the storefront |
+| **Importer workspace** | `#/import`, `#/library`, `#/products/*` | Admin | The original extraction/import/editor flow, unchanged |
 
-## Features
+Import workflow (unchanged):
+
+**Paste link → Extract → Preview → Edit → Validate → Save → Publish**
+
+## Storefront (Talishh)
+
+- Products are visible immediately on the homepage - no login, no extra navigation
+- Responsive product grid: **2 columns on phones**, 3 at 640 px, 4 at 900 px, 5 at 1200 px+
+- Product cards show image, title, brand, price, MRP, discount and store badge; missing fields are hidden rather than faked
+- Instant debounced search, store/category/price filters and sorting (latest, price asc/desc, discount, A-Z)
+- Product detail page with gallery, highlights, description and specifications
+- Purchase flow: **Opening product... → Thanks for shopping with Talishh ❤️ → redirect to the store**
+- Missing or invalid store links never redirect: the user gets a clear error and a way back
+- Skeleton loaders, empty states, error states, image fallbacks and lazy loading throughout
+
+## Admin panel
+
+- Session-based login (HttpOnly, SameSite cookie, HMAC-signed token, rate-limited)
+- Dashboard with catalog statistics (total, visible, hidden, missing link/price/image, stores, average price)
+- Product management: search, filter by store/visibility, sort, edit, hide/show, delete, bulk actions
+- Edit drawer with live preview; imported source data is shown read-only
+- Publish products from the import library to the storefront catalog (selected or all)
+- Responsive: table on desktop, cards on mobile
+- Toast notifications and confirmation dialogs for destructive actions
+
+## Extraction features
 
 - URL-based product extraction with server-side fetching (no browser scraping or browser CORS failures), including Amazon `/dp/ASIN`, `/gp/product/ASIN`, `amzn.in`, `amzn.to`, `a.co` and tracked links
 - Platform detection and provider/adaptor architecture: Amazon, eBay, Walmart, Etsy, AliExpress, Shopify stores (via their public product JSON), plus a generic structured-data adapter (JSON-LD, Open Graph, meta tags)
@@ -31,6 +60,7 @@ The workflow is intentionally simple:
 - React 19 + JSX + Vite 6
 - External CSS design system (no Tailwind, no UI library)
 - Express + Cheerio extraction service
+- JSON-file storefront catalog (atomic writes, swappable for a real database)
 - React Router (hash-based routing for portable deployment)
 - Versioned, atomic localStorage persistence store (repository pattern, swappable for a real database)
 - No TypeScript, no animations frameworks, no heavy dependencies
@@ -42,8 +72,14 @@ npm install
 npm run dev
 ```
 
-- Web app: http://localhost:5173
-- Extraction API: http://localhost:8787 (proxied to the app as `/api`)
+- Storefront: http://localhost:5173
+- Admin panel: http://localhost:5173/#/admin
+- Importer workspace: http://localhost:5173/#/import
+- API: http://localhost:8787 (proxied to the app as `/api`)
+
+Default development admin credentials are `admin` / `talishh-admin`. **Set `ADMIN_USERNAME` and
+`ADMIN_PASSWORD` before deploying** - the server logs a warning while the default is in use, and the
+admin panel shows a banner.
 
 In development the extraction service allows local/private URLs and a higher rate limit so it can be tested against local mock stores.
 
@@ -72,6 +108,8 @@ Production hardening is enabled automatically: private/internal IPs are blocked 
 | `npm run dev:web` | Vite only |
 | `npm run dev:api` | Extraction API only |
 | `npm test` | Extraction pipeline test suite (adapter fixtures + API behavior) |
+| `npm run test:ui` | Storefront + admin UI test suite (real app in jsdom against a live API) |
+| `npm run test:all` | Both suites |
 | `npm run build` | Production frontend build |
 | `npm start` | Production server (frontend + API) |
 | `npm run serve` | Build then start |
@@ -86,6 +124,12 @@ Production hardening is enabled automatically: private/internal IPs are blocked 
 | `AFFILATE_DEV` | unset | Set to `1` by `npm run dev` to allow local URLs and higher limits |
 | `AFFILATE_DEBUG` | unset | Set to `1` to retain the latest 100 extraction diagnostics outside development |
 | `AFFILATE_ALLOWED_ORIGINS` | unset | Comma-separated origins allowed to call the API cross-origin; same-origin needs no setting |
+| `ADMIN_USERNAME` | `admin` | Admin panel username |
+| `ADMIN_PASSWORD` | `talishh-admin` (dev default) | Admin panel password. **Always set this in production** |
+| `AFFILATE_SESSION_SECRET` | random per boot | HMAC secret for admin sessions. Set it to keep sessions valid across restarts |
+| `AFFILATE_DATA_DIR` | `server/data` | Directory holding the storefront catalog file |
+| `AFFILATE_LOGIN_RATE_MAX` | `10` | Admin login attempts per minute per IP |
+| `AFFILATE_PUBLISH_LIMIT` | `8mb` | Max body size for the publish endpoint |
 
 In development, diagnostics are available at `GET /api/debug/extractions`. The endpoint is disabled in production unless `AFFILATE_DEBUG=1`. Extraction and health responses use `Cache-Control: no-store`.
 
@@ -96,7 +140,11 @@ In development, diagnostics are available at `GET /api/debug/extractions`. The e
 ```
 src/
   components/      reusable UI, layout, extractor, product editor, library
+    store/         Talishh storefront: logo, product card, image, redirect overlay, shell
+    admin/         admin shell (sidebar) and product edit drawer
   pages/           Dashboard, Library, Editor, NotFound
+    store/         storefront home + product detail
+    admin/         admin login, dashboard, products, import & publish
   state/           AppProvider (products, history, draft) + product factory
   services/        api, storage, export, image helpers
   hooks/           debounce, autosave, api health, keyboard shortcuts, extraction
@@ -106,7 +154,12 @@ src/
   utils/           ids, formatting, URL handling, product merge (refresh)
   styles/          design tokens + component styles (external CSS)
 server/
-  index.js         Express API (health, extract, static hosting in prod)
+  index.js         Express API (health, extract, catalog, static hosting in prod)
+  auth.js          admin session tokens, cookies and route guard
+  catalog/
+    model.js       library product -> storefront catalog projection, purchase URL resolution
+    store.js       atomic JSON catalog persistence
+    routes.js      public catalog + protected admin endpoints
   security.js      SSRF / URL safety checks
   rateLimit.js     in-memory sliding window limiter
   extraction/
@@ -122,7 +175,36 @@ test/
   fixtures/        mock store HTML for every adapter
   mock-server.mjs  static server + Shopify product JSON endpoint
   run.mjs          extraction test suite (npm test)
+  ui/              storefront + admin UI suite in jsdom (npm run test:ui)
 ```
+
+### Storefront data flow
+
+The extraction pipeline is the single source of truth. The storefront is a read-only projection of it:
+
+```
+Admin: paste link -> [UNCHANGED extraction pipeline] -> draft -> edit -> save to library (localStorage)
+                                                                              |
+                                                       Admin -> "Publish" ----+
+                                                                              v
+                                              POST /api/admin/publish  (session protected)
+                                                                              |
+                                              projection: pick + sanitize storefront fields
+                                                                              v
+                                                     server/data/catalog.json (atomic write)
+                                                                              |
+                                    Visitor: GET /api/products, /api/products/:id, /:id/go
+                                                                              v
+                                                     Talishh storefront (public, no login)
+```
+
+Publishing **never re-extracts**: it copies already-extracted records and adds storefront-only state
+(visibility, publish timestamp, admin overrides). Admin edits made in the panel are tracked in
+`adminEditedFields` and are preserved when the same product is published again.
+
+Purchase URL priority: `affiliateUrl` -> `source.originalUrl` -> `source.url` -> `source.finalUrl`.
+Only `http(s)` URLs are accepted; anything else is dropped and the product is marked as having no
+buyable link instead of redirecting somewhere unsafe.
 
 ### Extraction pipeline
 
@@ -161,6 +243,11 @@ Each product stores: id, title, short/long description, brand, category, subcate
 - SSRF protection: private IPv4/IPv6 ranges, localhost, metadata endpoints and non-standard ports are rejected in production
 - Credentials in URLs are rejected; `javascript:` and other schemes are blocked
 - No secrets or API keys are bundled; environment configuration is separated per environment
+- Admin credentials live only in server environment variables and are never sent to or stored in the frontend
+- Admin sessions use HttpOnly, SameSite=Lax cookies with an HMAC-signed, expiring token (Secure over HTTPS)
+- Every admin endpoint is guarded server-side; hiding admin UI is never the only protection
+- Admin logins are rate limited and credentials are compared in constant time
+- Product URLs stored in the catalog are re-validated before they are served to visitors
 
 ## Notes on extraction reality
 

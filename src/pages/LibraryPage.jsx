@@ -414,7 +414,7 @@ export function LibraryPage() {
               title="No products yet"
               message="Import your first product by pasting a store link on the dashboard."
               action={
-                <Link to="/" className="btn btn-primary">
+                <Link to="/import" className="btn btn-primary">
                   Import a product
                 </Link>
               }

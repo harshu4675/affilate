@@ -3,15 +3,16 @@ import { Icon } from '../icons/Icons.jsx';
 import { ConnectionPill } from './ConnectionPill.jsx';
 
 const NAV_ITEMS = [
-  { to: '/', label: 'Dashboard', icon: 'grid', end: true },
-  { to: '/library', label: 'Library', icon: 'list', end: false }
+  { to: '/import', label: 'Dashboard', icon: 'grid', end: true },
+  { to: '/library', label: 'Library', icon: 'list', end: false },
+  { to: '/admin', label: 'Admin', icon: 'shield', end: false }
 ];
 
 export function AppHeader() {
   return (
     <header className="app-header">
       <div className="app-header-inner">
-        <Link to="/" className="brand">
+        <Link to="/import" className="brand">
           <span className="brand-mark">
             <Icon name="box" size={18} strokeWidth={2} />
           </span>
