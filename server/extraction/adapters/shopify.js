@@ -9,6 +9,14 @@ function stripHtml(value) {
   return clean($.root().text());
 }
 
+function shopifyMoney(value) {
+  if (value == null || value === '') return null;
+  if (typeof value === 'number') return Number.isInteger(value) ? value / 100 : value;
+  const raw = String(value).trim();
+  if (/^-?\d+$/.test(raw)) return Number(raw) / 100;
+  return parsePrice(raw);
+}
+
 export const shopifyAdapter = createAdapter({
   id: 'shopify',
   label: 'Shopify store',
@@ -39,8 +47,8 @@ export const shopifyAdapter = createAdapter({
       type: 'Variant',
       value: clean(variant.title),
       sku: clean(variant.sku),
-      price: variant.price != null ? parsePrice(String(variant.price)) : null,
-      compareAtPrice: variant.compare_at_price != null ? parsePrice(String(variant.compare_at_price)) : null,
+      price: shopifyMoney(variant.price),
+      compareAtPrice: shopifyMoney(variant.compare_at_price),
       available: variant.available
     }));
     const images = (product.images || []).map((image) => {
@@ -57,7 +65,7 @@ export const shopifyAdapter = createAdapter({
       price: variants.length && variants[0].price != null ? variants[0].price : null,
       originalPrice: variants.length && variants[0].compareAtPrice != null ? variants[0].compareAtPrice : null,
       currency: '',
-      availability: product.available ? 'In stock' : 'Out of stock',
+      availability: product.available === true ? 'In stock' : product.available === false ? 'Out of stock' : '',
       seller: clean(product.vendor),
       images: uniqueImages(images),
       variants,

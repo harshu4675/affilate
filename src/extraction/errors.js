@@ -59,5 +59,13 @@ export const EXTRACTION_ERRORS = {
 
 export function extractionErrorInfo(code, extra = {}) {
   const entry = EXTRACTION_ERRORS[code] || EXTRACTION_ERRORS.internal;
-  return { code, title: entry.title, hint: entry.hint, retryable: Boolean(extra.retryable), retryAfterMs: extra.retryAfterMs || 0 };
+  return {
+    code,
+    title: entry.title,
+    hint: extra.message || entry.hint,
+    retryable: Boolean(extra.retryable),
+    retryAfterMs: extra.retryAfterMs || 0,
+    partial: Boolean(extra.partial),
+    fieldsFound: Array.isArray(extra.fieldsFound) ? extra.fieldsFound : []
+  };
 }

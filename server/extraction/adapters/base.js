@@ -43,25 +43,29 @@ export function offersFromLd(node) {
 
 export function metaProduct($, meta = metaMap($)) {
   const ld = jsonLdProducts($);
-  const primary = ld[0] || {};
+  const primary = [...ld].sort((a, b) => productNodeScore(b) - productNodeScore(a))[0] || {};
   const offers = offersFromLd(primary);
-  const ldImages = jsonLdImages(primary);
+  const ldImages = ld.flatMap((node) => jsonLdImages(node));
   const ogImages = ogImageList($, meta);
-  const description = clean(primary.description || meta['og:description'] || meta['description']);
+  const description = clean(primary.description || meta['og:description'] || meta['twitter:description'] || meta['description']);
   const brand = clean(
-    primary.brand && (typeof primary.brand === 'string' ? primary.brand : primary.brand.name)
+    (primary.brand && (typeof primary.brand === 'string' ? primary.brand : primary.brand.name)) ||
+      meta['product:brand'] ||
+      meta['og:brand']
   );
+  const metaPrice = parsePrice(meta['product:price:amount'] || meta['og:price:amount'] || meta['product:sale_price:amount']);
+  const metaOriginalPrice = parsePrice(meta['product:original_price:amount']);
   return {
     title: clean(primary.name || meta['og:title'] || meta['twitter:title'] || meta['title'] || meta['product:title']),
     description,
     brand,
     category: clean(primary.category || meta['product:category'] || meta['og:product:category']),
-    sku: clean(primary.sku),
-    productId: clean(primary.productID || primary.sku || primary.mpn),
-    price: offers.price,
-    originalPrice: offers.originalPrice,
-    currency: offers.currency,
-    availability: offers.availability,
+    sku: clean(primary.sku || meta['product:sku']),
+    productId: clean(primary.productID || primary.asin || primary.sku || primary.mpn || meta['product:retailer_item_id']),
+    price: offers.price != null ? offers.price : metaPrice,
+    originalPrice: offers.originalPrice != null ? offers.originalPrice : metaOriginalPrice,
+    currency: offers.currency || clean(meta['product:price:currency'] || meta['og:price:currency']),
+    availability: offers.availability || clean(meta['product:availability']),
     seller: offers.seller,
     images: uniqueImages([...ldImages, ...ogImages]),
     variants: [],
@@ -70,6 +74,11 @@ export function metaProduct($, meta = metaMap($)) {
     lowPrice: offers.lowPrice,
     highPrice: offers.highPrice
   };
+}
+
+function productNodeScore(node) {
+  if (!node || typeof node !== 'object') return 0;
+  return Number(Boolean(node.name)) * 3 + Number(Boolean(node.offers)) * 4 + Number(Boolean(node.image)) * 2 + Number(Boolean(node.sku || node.productID || node.asin)) * 3;
 }
 
 export function breadcrumbCategory($) {

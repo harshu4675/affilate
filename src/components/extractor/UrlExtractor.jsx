@@ -27,7 +27,7 @@ export function UrlExtractor({ onResult, onError, onManual, autoFocus = false })
     return { kind: 'valid', platform: detected };
   }, [debouncedUrl]);
 
-  const extracting = phase === 'validating' || phase === 'detecting' || phase === 'extracting' || phase === 'processing';
+  const extracting = ['validating', 'detecting', 'extracting', 'processing', 'preparing'].includes(phase);
 
   const handleSubmit = async (event) => {
     if (event) event.preventDefault();
@@ -117,6 +117,9 @@ export function UrlExtractor({ onResult, onError, onManual, autoFocus = false })
           <div className="extraction-error-content">
             <h4 className="extraction-error-title">{error.title}</h4>
             <p className="extraction-error-hint">{error.hint}</p>
+            {error.partial && error.fieldsFound.length > 0 && (
+              <p className="extraction-error-partial">Partial data was found ({error.fieldsFound.join(', ')}), but it was not reliable enough to create a product.</p>
+            )}
           </div>
           <div className="extraction-error-actions">
             <Button variant="secondary" size="sm" icon="refresh" onClick={() => handleSubmit()}>

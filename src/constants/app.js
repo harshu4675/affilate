@@ -33,6 +33,7 @@ export const SORT_OPTIONS = [
   { id: 'oldest', label: 'Oldest first' },
   { id: 'price_asc', label: 'Price: low to high' },
   { id: 'price_desc', label: 'Price: high to low' },
-  { id: 'alpha', label: 'Alphabetical' },
+  { id: 'alpha', label: 'A to Z' },
+  { id: 'alpha_desc', label: 'Z to A' },
   { id: 'updated', label: 'Recently updated' }
 ];

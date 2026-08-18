@@ -3,8 +3,14 @@ import { IconButton } from '../ui/Button.jsx';
 import { Dropdown, MenuItem } from '../ui/Dropdown.jsx';
 import { StatusBadge, PlatformBadge } from '../ui/Badge.jsx';
 import { formatCurrency, formatDate } from '../../utils/format.js';
+import { SafeImage } from '../ui/SafeImage.jsx';
 
-export function ProductTable({ products, selection, onToggle, onSelectAll, onView, onEdit, onDuplicate, onCopyLink, onOpenSource, onDelete, allSelected }) {
+function primaryImage(product) {
+  const images = product.images || [];
+  return images.find((image) => image.isPrimary) || images[0] || null;
+}
+
+export function ProductTable({ products, selection, onToggle, onSelectAll, onView, onEdit, onDuplicate, onCopyLink, onOpenSource, onRefresh, onDelete, allSelected }) {
   return (
     <div className="table-scroll">
       <table className="product-table">
@@ -40,8 +46,8 @@ export function ProductTable({ products, selection, onToggle, onSelectAll, onVie
               <td className="col-product">
                 <div className="table-product">
                   <div className="table-thumb">
-                    {product.images && product.images[0] ? (
-                      <img src={product.images[0].url} alt="" loading="lazy" />
+                    {primaryImage(product) ? (
+                      <SafeImage src={primaryImage(product).url} alt={product.title || 'Product'} />
                     ) : (
                       <Icon name="image" size={15} />
                     )}
@@ -63,7 +69,12 @@ export function ProductTable({ products, selection, onToggle, onSelectAll, onVie
               </td>
               <td className="col-price">
                 {product.price != null ? (
-                  <span className="table-price">{formatCurrency(product.price, product.currency)}</span>
+                  <span className="table-price-stack">
+                    <span className="table-price">{formatCurrency(product.price, product.currency)}</span>
+                    {product.originalPrice != null && (
+                      <span className="table-original-price">{formatCurrency(product.originalPrice, product.currency)}</span>
+                    )}
+                  </span>
                 ) : (
                   <span className="table-muted">—</span>
                 )}
@@ -84,6 +95,7 @@ export function ProductTable({ products, selection, onToggle, onSelectAll, onVie
                       <IconButton name="dotsVertical" label="More actions" size="sm" />
                     }
                   >
+                    <MenuItem icon="refresh" label="Refresh data" onClick={() => onRefresh(product)} />
                     <MenuItem icon="duplicate" label="Duplicate" onClick={() => onDuplicate(product)} />
                     <MenuItem icon="copy" label="Copy source link" onClick={() => onCopyLink(product)} />
                     <MenuItem
@@ -104,14 +116,14 @@ export function ProductTable({ products, selection, onToggle, onSelectAll, onVie
   );
 }
 
-export function ProductCardGrid({ products, selection, onToggle, onView, onEdit, onDuplicate, onCopyLink, onOpenSource, onDelete }) {
+export function ProductCardGrid({ products, selection, onToggle, onView, onEdit, onDuplicate, onCopyLink, onOpenSource, onRefresh, onDelete }) {
   return (
     <div className="product-cards">
       {products.map((product) => (
         <div className={`product-card card${selection.has(product.id) ? ' product-card-selected' : ''}`} key={product.id}>
           <div className="product-card-media" onClick={() => onView(product)}>
-            {product.images && product.images[0] ? (
-              <img src={product.images[0].url} alt="" loading="lazy" />
+            {primaryImage(product) ? (
+              <SafeImage src={primaryImage(product).url} alt={product.title || 'Product'} />
             ) : (
               <div className="product-card-media-empty">
                 <Icon name="image" size={22} />
@@ -143,9 +155,14 @@ export function ProductCardGrid({ products, selection, onToggle, onView, onEdit,
             </div>
             <div className="product-card-price">
               {product.price != null ? (
-                formatCurrency(product.price, product.currency)
+                <>
+                  <span>{formatCurrency(product.price, product.currency)}</span>
+                  {product.originalPrice != null && (
+                    <span className="product-card-original">{formatCurrency(product.originalPrice, product.currency)}</span>
+                  )}
+                </>
               ) : (
-                <span className="table-muted">No price</span>
+                <span className="table-muted">Not available from source</span>
               )}
             </div>
             <div className="product-card-footer">
@@ -157,6 +174,7 @@ export function ProductCardGrid({ products, selection, onToggle, onView, onEdit,
               <Dropdown
                 trigger={<IconButton name="dotsVertical" label="More actions" size="sm" />}
               >
+                <MenuItem icon="refresh" label="Refresh data" onClick={() => onRefresh(product)} />
                 <MenuItem icon="duplicate" label="Duplicate" onClick={() => onDuplicate(product)} />
                 <MenuItem icon="copy" label="Copy source link" onClick={() => onCopyLink(product)} />
                 <MenuItem

@@ -1,7 +1,7 @@
 import { clean, round2 } from './parser.js';
 
 export function normalizeProduct(raw, { platform, url, finalUrl }) {
-  const images = cleanImages(raw.images || [], platform);
+  const images = cleanImages(raw.images || [], platform, finalUrl || url);
   const price = toNumber(raw.price);
   let originalPrice = toNumber(raw.originalPrice);
   if (price != null && originalPrice != null && originalPrice <= price) originalPrice = null;
@@ -40,12 +40,20 @@ function toNumber(value) {
   return round2(num);
 }
 
-function cleanImages(images, platform) {
+function cleanImages(images, platform, baseUrl) {
   const seen = new Set();
   const out = [];
   for (const image of images) {
-    const url = clean(image && (typeof image === 'string' ? image : image.url || image.src));
-    if (!url || !/^https?:\/\//i.test(url)) continue;
+    let url = clean(image && (typeof image === 'string' ? image : image.url || image.src));
+    if (!url) continue;
+    if (url.startsWith('//')) url = `https:${url}`;
+    if (!/^https?:\/\//i.test(url)) {
+      try {
+        url = new URL(url, baseUrl).toString();
+      } catch {
+        continue;
+      }
+    }
     const normalized = normalizePlatformImage(url, platform);
     const key = normalized.replace(/^https?:/i, 'http:');
     if (seen.has(key)) continue;
@@ -138,14 +146,20 @@ function cleanFeatures(features) {
 
 const KEY_FIELDS = ['title', 'description', 'price', 'images', 'brand', 'category', 'availability'];
 
-export function analyzeCoverage(product) {
+export function analyzeCoverage(product, { evidence = true } = {}) {
   const missing = [];
+  const fieldsFound = [];
   for (const field of KEY_FIELDS) {
     const value = product[field];
-    const present = field === 'images' ? Array.isArray(value) && value.length > 0 : Boolean(value);
+    const present = field === 'images' ? Array.isArray(value) && value.length > 0 : value !== '' && value != null;
     if (!present) missing.push(field);
+    else fieldsFound.push(field);
   }
   const coverage = Math.round(((KEY_FIELDS.length - missing.length) / KEY_FIELDS.length) * 100);
-  const productLike = Boolean(product.title && (product.price != null || product.images.length > 0 || product.productId));
-  return { coverage, missingFields: missing, productLike };
+  const productLike = Boolean(
+    evidence &&
+      product.title &&
+      (product.price != null || product.images.length > 0 || product.productId || product.sku)
+  );
+  return { coverage, missingFields: missing, fieldsFound, productLike };
 }

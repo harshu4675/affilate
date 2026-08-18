@@ -46,8 +46,11 @@ export function createProductFromExtraction(data) {
     })),
     features: (product.features || []).map((feature) => String(feature)),
     tags: (product.tags || []).map((tag) => String(tag)),
+    affiliateUrl:
+      source.originalUrl && source.originalUrl !== source.url ? source.originalUrl : '',
     source: {
       url: source.url || '',
+      originalUrl: source.originalUrl || source.url || '',
       finalUrl: source.finalUrl || source.url || '',
       platform: source.platform || 'generic',
       platformLabel: source.platformLabel || 'Generic store',
@@ -89,8 +92,10 @@ export function createEmptyProduct() {
     specifications: [],
     features: [],
     tags: [],
+    affiliateUrl: '',
     source: {
       url: '',
+      originalUrl: '',
       finalUrl: '',
       platform: '',
       platformLabel: '',
