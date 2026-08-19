@@ -128,6 +128,33 @@
   }
 }
 
+.storage-alert {
+  width: min(calc(100% - 32px), var(--container-max));
+  margin: 14px auto 0;
+  padding: 11px 14px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  color: var(--danger);
+  background: var(--danger-soft);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius);
+  font-size: 12.5px;
+}
+
+.storage-alert > div {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.storage-alert strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
 .app-main {
   flex: 1;
   width: 100%;

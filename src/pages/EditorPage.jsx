@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useBlocker, useNavigate, useParams } from 'react-router-dom';
+import { Link, useBlocker, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useApp } from '../state/AppProvider.jsx';
 import { useToast } from '../components/ui/ToastProvider.jsx';
 import { useAutosave } from '../hooks/useAutosave.js';
@@ -29,10 +29,11 @@ import { STATUSES, STATUS_LABELS } from '../constants/app.js';
 
 export function EditorPage() {
   const { id } = useParams();
-  const isNew = id === 'new';
+  const isNew = !id;
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const toast = useToast();
-  const { products, draft, setDraft, clearDraft, upsertProduct, deleteProducts, findByUrl } = useApp();
+  const { products, draft, setDraft, clearDraft, upsertProduct, deleteProducts, findDuplicate } = useApp();
 
   const [product, setProduct] = useState(null);
   const [loadState, setLoadState] = useState('loading');
@@ -42,6 +43,8 @@ export function EditorPage() {
   const [duplicateInfo, setDuplicateInfo] = useState(null);
   const [refreshOpen, setRefreshOpen] = useState(false);
   const [refreshSelection, setRefreshSelection] = useState([]);
+  const [refreshCandidate, setRefreshCandidate] = useState(null);
+  const [refreshRequested, setRefreshRequested] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [lightbox, setLightbox] = useState(null);
 
@@ -68,6 +71,12 @@ export function EditorPage() {
       }
     }
   }, [id, isNew]);
+
+  useEffect(() => {
+    if (isNew || loadState !== 'ready' || searchParams.get('refresh') !== '1') return;
+    setRefreshRequested(true);
+    setSearchParams({}, { replace: true });
+  }, [isNew, loadState, searchParams, setSearchParams]);
 
   const updateProduct = useCallback((patch, fieldPaths) => {
     setProduct((prev) => {
@@ -143,12 +152,16 @@ export function EditorPage() {
       createdAt: target.createdAt || now
     };
     const isUpdate = Boolean(products.find((item) => item.id === record.id));
-    upsertProduct(record);
+    const saved = upsertProduct(record, { clearDraft: true });
+    if (!saved.ok) {
+      toast.error(saved.message || 'Product could not be saved. Your draft is still available.');
+      return false;
+    }
     discardedRef.current = true;
-    clearDraft();
     dirtyRef.current = false;
     toast.success(isUpdate ? 'Product updated.' : 'Product saved to library.');
     navigate('/library');
+    return true;
   };
 
   const handleSave = () => {
@@ -165,32 +178,43 @@ export function EditorPage() {
       }
       return;
     }
-    const existing = findByUrl(product.source && product.source.url);
-    if (existing && existing.id !== product.id) {
+    const existing = findDuplicate(product);
+    if (existing) {
       setDuplicateInfo({ existing });
       return;
     }
     persist(product);
   };
 
-  const handleRefreshClick = () => {
+  const handleRefreshClick = async () => {
     if (!product || !product.source || !product.source.url) {
       toast.error('This product has no source URL to refresh from.');
       return;
     }
-    if ((product.editedFields || []).length > 0) {
-      setRefreshSelection(REFRESH_GROUPS.map((group) => group.id));
-      setRefreshOpen(true);
-      return;
-    }
-    runRefresh(REFRESH_GROUPS.map((group) => group.id));
-  };
-
-  const runRefresh = async (groups) => {
-    if (!product || !product.source || !product.source.url) return;
     setRefreshing(true);
     try {
       const data = await extractProduct(product.source.url);
+      setRefreshCandidate(data);
+      setRefreshSelection(REFRESH_GROUPS.map((group) => group.id));
+      setRefreshOpen(true);
+    } catch (err) {
+      toast.error(err && err.message ? err.message : 'Could not refresh product data.');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!refreshRequested || !product) return;
+    setRefreshRequested(false);
+    handleRefreshClick();
+  }, [refreshRequested, product]);
+
+  const runRefresh = async (groups) => {
+    if (!product || !product.source || !product.source.url || !refreshCandidate) return;
+    setRefreshing(true);
+    try {
+      const data = refreshCandidate;
       const fresh = data.product;
       const platform = data.source.platform;
       setProduct((prev) => {
@@ -203,13 +227,18 @@ export function EditorPage() {
             platform: data.source.platform || merged.source.platform,
             platformLabel: data.source.platformLabel || merged.source.platformLabel,
             domain: data.source.domain || merged.source.domain,
-            finalUrl: data.source.finalUrl || merged.source.finalUrl
+            finalUrl: data.source.finalUrl || merged.source.finalUrl,
+            lastRefreshedAt: data.source.extractedAt || new Date().toISOString(),
+            partial: Boolean(data.source.partial),
+            missingFields: data.source.missingFields || []
           }
         };
       });
+      dirtyRef.current = true;
       setRefreshOpen(false);
       setRefreshSelection([]);
-      toast.success('Product data refreshed from the source.');
+      setRefreshCandidate(null);
+      toast.success('Selected source changes are ready. Save the product to keep them.');
     } catch (err) {
       toast.error(err && err.message ? err.message : 'Could not refresh product data.');
       setRefreshOpen(false);
@@ -224,9 +253,13 @@ export function EditorPage() {
   };
 
   const confirmDelete = () => {
-    deleteProducts([product.id]);
+    const deleted = deleteProducts([product.id]);
+    if (!deleted.ok) {
+      toast.error(deleted.message || 'Product could not be deleted.');
+      return;
+    }
     discardedRef.current = true;
-    clearDraft();
+    dirtyRef.current = false;
     toast.success('Product deleted.');
     navigate('/library');
   };
@@ -234,9 +267,26 @@ export function EditorPage() {
   const handleDuplicate = () => {
     if (!product) return;
     const copy = duplicateProduct(product);
-    upsertProduct(copy);
+    const saved = upsertProduct(copy);
+    if (!saved.ok) {
+      toast.error(saved.message || 'Product could not be duplicated.');
+      return;
+    }
+    dirtyRef.current = false;
     toast.success('Product duplicated as a draft.');
     navigate(`/products/${copy.id}`);
+  };
+
+  const handleSaveDraft = () => {
+    if (!product) return;
+    const target = { ...product, status: 'draft' };
+    const existing = findDuplicate(target);
+    if (existing) {
+      setProduct(target);
+      setDuplicateInfo({ existing });
+      return;
+    }
+    persist(target);
   };
 
   const editedCount = product && product.editedFields ? product.editedFields.length : 0;
@@ -311,8 +361,16 @@ export function EditorPage() {
           <Button variant="ghost" size="sm" icon="duplicate" onClick={handleDuplicate}>
             Duplicate
           </Button>
-          <Button variant="ghost" size="sm" icon="trash" onClick={handleDelete} className="btn-danger-text">
-            Delete
+          {!isNew && (
+            <Button variant="ghost" size="sm" icon="trash" onClick={handleDelete} className="btn-danger-text">
+              Delete
+            </Button>
+          )}
+          <Button variant="secondary" size="sm" onClick={() => navigate('/library')}>
+            Cancel
+          </Button>
+          <Button variant="secondary" size="sm" icon="save" onClick={handleSaveDraft}>
+            Save as draft
           </Button>
           <Button variant="primary" size="sm" icon="check" onClick={handleSave}>
             Save product
@@ -417,11 +475,17 @@ export function EditorPage() {
       <RefreshDialog
         open={refreshOpen}
         editedCount={editedCount}
+        current={product}
+        fresh={refreshCandidate && refreshCandidate.product}
         selection={refreshSelection}
         onSelectionChange={setRefreshSelection}
         onRefreshAll={() => runRefresh(REFRESH_GROUPS.map((group) => group.id))}
         onRefreshSelected={() => runRefresh(refreshSelection)}
-        onCancel={() => setRefreshOpen(false)}
+        onCancel={() => {
+          setRefreshOpen(false);
+          setRefreshCandidate(null);
+          setRefreshSelection([]);
+        }}
         loading={refreshing}
       />
 

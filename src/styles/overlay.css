@@ -123,6 +123,70 @@
   color: var(--text-muted);
 }
 
+.extraction-stage-list {
+  list-style: none;
+  width: 100%;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 8px;
+  text-align: left;
+}
+
+.extraction-stage-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.extraction-stage-item.is-active {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.extraction-stage-item.is-complete {
+  color: var(--success);
+}
+
+.extraction-stage-marker {
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.extraction-stage-marker > span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.35;
+}
+
+.extraction-stage-item.is-active .extraction-stage-marker {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.extraction-stage-item.is-complete .extraction-stage-marker {
+  color: white;
+  background: var(--success);
+  border-color: var(--success);
+}
+
+.extraction-error-partial {
+  margin-top: 5px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 .lightbox {
   display: flex;
   align-items: center;
@@ -184,6 +248,83 @@
   border-radius: var(--radius);
   padding: 10px 14px;
   background: var(--surface-hover);
+}
+
+.refresh-comparison-head,
+.refresh-comparison-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.05fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+}
+
+.refresh-comparison-head {
+  padding: 0 14px 7px;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.refresh-comparison {
+  padding: 0;
+  overflow: hidden;
+}
+
+.refresh-comparison-row {
+  padding: 11px 13px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.refresh-comparison-row + .refresh-comparison-row {
+  border-top: 1px solid var(--border);
+}
+
+.refresh-comparison-row:hover {
+  background: var(--surface);
+}
+
+.refresh-comparison-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: var(--text);
+}
+
+.refresh-comparison-choice input {
+  margin-top: 2px;
+  accent-color: var(--primary);
+}
+
+@media (max-width: 640px) {
+  .refresh-comparison-head {
+    display: none;
+  }
+
+  .refresh-comparison-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .refresh-comparison-row > span:nth-child(2)::before,
+  .refresh-comparison-row > span:nth-child(3)::before {
+    display: block;
+    margin-bottom: 2px;
+    color: var(--text-muted);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .refresh-comparison-row > span:nth-child(2)::before {
+    content: 'Current data';
+  }
+
+  .refresh-comparison-row > span:nth-child(3)::before {
+    content: 'Latest source';
+  }
 }
 
 .duplicate-info p {

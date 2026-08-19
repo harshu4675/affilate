@@ -1,5 +1,6 @@
-import { createAdapter, metaProduct, normalizedImages, breadcrumbCategory } from './base.js';
+import { createAdapter, metaProduct, normalizedImages, breadcrumbCategory, specificValues } from './base.js';
 import { loadHtml, clean, textOf, firstText, firstPrice, metaMap, jsonLdProducts, jsonLdImages } from '../parser.js';
+import { extractAmazonProductId, isAmazonHost, isAmazonShortHost } from '../url.js';
 
 const AMAZON_DOMAINS = [
   'amazon.com',
@@ -27,7 +28,7 @@ export const amazonAdapter = createAdapter({
   id: 'amazon',
   label: 'Amazon',
   match(host) {
-    return AMAZON_DOMAINS.some((domain) => host === domain || host.endsWith(`.${domain}`));
+    return isAmazonHost(host) || isAmazonShortHost(host) || AMAZON_DOMAINS.some((domain) => host === domain || host.endsWith(`.${domain}`));
   },
   extract({ html, url }) {
     const $ = loadHtml(html);
@@ -44,38 +45,56 @@ export const amazonAdapter = createAdapter({
       .trim();
     const brand = fallback.brand || bylineBrand;
     const availability = firstText(['#availability span', '#availability .a-declarative .a-size-medium'], $) || fallback.availability;
-    const asin = String(url).match(/\/(?:dp|gp\/product|gp\/aw\/d)\/([A-Z0-9]{10})/i);
+    const asin = extractAmazonProductId(url) || clean($('#ASIN').attr('value')) || clean($('input[name="ASIN"]').attr('value'));
     const images = [];
+    const addImage = (value) => {
+      const src = clean(value);
+      if (src && /^https?:/i.test(src) && !/sprite|transparent-pixel|grey-pixel/i.test(src)) images.push(src);
+    };
     $('#altImages img').each((index, el) => {
-      const src = clean($(el).attr('src')) || clean($(el).attr('data-old-hires'));
-      if (src && src.includes('media-amazon.com')) images.push(src);
+      addImage($(el).attr('data-old-hires'));
+      addImage($(el).attr('src'));
     });
-    $('#landingImage').each((index, el) => {
-      const src = clean($(el).attr('src')) || clean($(el).attr('data-old-hires'));
-      if (src) images.push(src);
+    $('#landingImage, #imgBlkFront, [data-a-image-name="landingImage"]').each((index, el) => {
+      addImage($(el).attr('data-old-hires'));
+      addImage($(el).attr('src'));
+      const dynamic = $(el).attr('data-a-dynamic-image');
+      if (dynamic) {
+        try {
+          Object.keys(JSON.parse(dynamic)).forEach(addImage);
+        } catch {
+          return;
+        }
+      }
     });
     const ldImages = jsonLdImages(jsonLdProducts($)[0] || {});
     const description =
       textOf($, '#productDescription') ||
       textOf($, '#feature-bullets ul') ||
       fallback.description;
-    const seller = firstText(['#sellerProfileTriggerId', '#merchantInfoFeature_feature_div .offer-display-feature-text', '.tabular-buybox-text-message'], $) || '';
+    const seller = firstText(['#sellerProfileTriggerId', '#merchantInfoFeature_feature_div .offer-display-feature-text', '.tabular-buybox-text-message'], $) || fallback.seller;
+    const features = [];
+    $('#feature-bullets li span.a-list-item').each((index, element) => {
+      const feature = clean($(element).text());
+      if (feature && !/^see more/i.test(feature)) features.push(feature);
+    });
+    const specifications = specificValues($, '#productDetails_techSpec_section_1, #productDetails_detailBullets_sections1, #technicalSpecifications_section_1');
     return {
       title,
       description,
       brand,
       category: fallback.category || breadcrumbCategory($),
-      sku: asin ? asin[1] : '',
-      productId: asin ? asin[1] : '',
+      sku: asin,
+      productId: asin,
       price,
       originalPrice,
-      currency: fallback.currency || 'USD',
+      currency: fallback.currency,
       availability: availability || fallback.availability,
       seller,
-      images: normalizedImages([...images, ...ldImages], 'amazon'),
+      images: normalizedImages([...images, ...ldImages, ...(fallback.images || [])], 'amazon'),
       variants: [],
-      specifications: [],
-      features: []
+      specifications,
+      features
     };
   }
 });

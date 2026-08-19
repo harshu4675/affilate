@@ -21,7 +21,11 @@ export const PLATFORMS = [
       'amazon.pl',
       'amazon.se',
       'amazon.com.tr',
-      'amazon.eg'
+      'amazon.eg',
+      'amazon.sa',
+      'amzn.in',
+      'amzn.to',
+      'a.co'
     ],
     color: '#f59e0b'
   },

@@ -42,10 +42,19 @@ export function normalizeUrlForCompare(url) {
   try {
     const parsed = new URL(url);
     parsed.hash = '';
-    for (const key of TRACKING_PARAMS) parsed.searchParams.delete(key);
+    for (const key of [...parsed.searchParams.keys()]) {
+      const lower = key.toLowerCase();
+      if (TRACKING_PARAMS.some((entry) => entry.toLowerCase() === lower) || lower.startsWith('utm_')) parsed.searchParams.delete(key);
+    }
+    const host = parsed.hostname.toLowerCase().replace(/^www\./, '').replace(/\.$/, '');
+    const amazonHost = /(^|\.)amazon\.(com|ca|co\.uk|de|fr|it|es|nl|in|com\.au|com\.br|com\.mx|ae|sa|sg|co\.jp|pl|se|com\.tr|eg)$/.test(host);
+    if (amazonHost) {
+      const match = decodeURIComponent(parsed.pathname).match(/\/(?:dp|gp\/product|gp\/aw\/d|product-reviews|exec\/obidos\/asin)\/([a-z0-9]{10})(?:[/?]|$)/i);
+      if (match) return `https://${host}/dp/${match[1].toUpperCase()}`;
+    }
     parsed.searchParams.sort();
-    const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
-    return `${parsed.protocol}//${host}${parsed.pathname}${parsed.search}`;
+    const pathname = parsed.pathname.length > 1 ? parsed.pathname.replace(/\/+$/, '') : parsed.pathname;
+    return `${parsed.protocol.toLowerCase()}//${host}${parsed.port ? `:${parsed.port}` : ''}${pathname}${parsed.search}`;
   } catch {
     return String(url).trim().toLowerCase();
   }

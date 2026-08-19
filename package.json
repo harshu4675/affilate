@@ -12,11 +12,14 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "cross-env NODE_ENV=production node server/index.js",
-    "serve": "npm run build && npm run start"
+    "serve": "npm run build && npm run start",
+    "test:ui": "vite build --config test/ui/vite.config.js && node test/ui/run.mjs",
+    "test:all": "npm test && npm run test:ui"
   },
   "dependencies": {
     "@fontsource/inter": "^5.2.5",
     "cheerio": "^1.0.0",
+    "dotenv": "^17.4.2",
     "express": "^4.21.2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
@@ -26,6 +29,7 @@
     "@vitejs/plugin-react": "^4.5.2",
     "concurrently": "^9.1.2",
     "cross-env": "^7.0.3",
+    "jsdom": "^25.0.1",
     "vite": "^6.3.5"
   },
   "engines": {

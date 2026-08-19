@@ -1,77 +1,165 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { loadJson, saveJson, KEYS } from '../services/storage.js';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { KEYS, loadAppState, parseStoredState, saveAppState } from '../services/storage.js';
 import { normalizeUrlForCompare } from '../utils/url.js';
 import { createId } from '../utils/id.js';
 
 const AppContext = createContext(null);
 
 export function AppProvider({ children }) {
-  const [products, setProducts] = useState(() => loadJson(KEYS.products, []));
-  const [history, setHistory] = useState(() => loadJson(KEYS.history, []));
-  const [draft, setDraftState] = useState(() => loadJson(KEYS.draft, null));
+  const initialRef = useRef(null);
+  if (!initialRef.current) initialRef.current = loadAppState();
+  const storeRef = useRef(initialRef.current);
+  const [store, setStore] = useState(initialRef.current);
+  const [persistenceError, setPersistenceError] = useState(null);
 
-  useEffect(() => {
-    const timer = setTimeout(() => saveJson(KEYS.products, products), 250);
-    return () => clearTimeout(timer);
-  }, [products]);
-
-  useEffect(() => {
-    const timer = setTimeout(() => saveJson(KEYS.history, history), 250);
-    return () => clearTimeout(timer);
-  }, [history]);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (draft) saveJson(KEYS.draft, draft);
-      else saveJson(KEYS.draft, null);
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [draft]);
-
-  const upsertProduct = useCallback((product) => {
-    setProducts((prev) => {
-      const index = prev.findIndex((item) => item.id === product.id);
-      if (index === -1) return [product, ...prev];
-      const next = [...prev];
-      next[index] = product;
-      return next;
-    });
+  const commit = useCallback((updater) => {
+    const previous = storeRef.current;
+    const next = typeof updater === 'function' ? updater(previous) : updater;
+    if (!next || next === previous) return { ok: true };
+    const saved = saveAppState(next);
+    if (!saved.ok) {
+      setPersistenceError(saved);
+      return saved;
+    }
+    storeRef.current = next;
+    setStore(next);
+    setPersistenceError(null);
+    return saved;
   }, []);
 
-  const deleteProducts = useCallback((ids) => {
-    const set = new Set(ids);
-    setProducts((prev) => prev.filter((item) => !set.has(item.id)));
+  useEffect(() => {
+    const handleStorage = (event) => {
+      if (event.key !== KEYS.store || !event.newValue) return;
+      const next = parseStoredState(event.newValue);
+      if (!next) return;
+      storeRef.current = next;
+      setStore(next);
+      setPersistenceError(null);
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
   }, []);
 
-  const addHistory = useCallback((entry) => {
-    setHistory((prev) => [{ id: entry.id || createId('hist'), ...entry }, ...prev].slice(0, 60));
-  }, []);
+  const upsertProduct = useCallback(
+    (product, options = {}) => {
+      if (!product || !product.id) return { ok: false, code: 'invalid_product', message: 'The product record is invalid.' };
+      return commit((previous) => {
+        const index = previous.products.findIndex((item) => item.id === product.id);
+        const products = [...previous.products];
+        if (index === -1) products.unshift(product);
+        else products[index] = product;
+        return { ...previous, products, draft: options.clearDraft ? null : previous.draft };
+      });
+    },
+    [commit]
+  );
 
-  const setDraft = useCallback((value) => setDraftState(value), []);
-  const clearDraft = useCallback(() => setDraftState(null), []);
+  const upsertProducts = useCallback(
+    (records) => {
+      if (!Array.isArray(records) || records.some((record) => !record || !record.id)) {
+        return { ok: false, code: 'invalid_product', message: 'One or more product records are invalid.' };
+      }
+      return commit((previous) => {
+        const byId = new Map(previous.products.map((item) => [item.id, item]));
+        for (const record of records) byId.set(record.id, record);
+        const added = records.filter((record) => !previous.products.some((item) => item.id === record.id));
+        return {
+          ...previous,
+          products: [...added, ...previous.products.map((item) => byId.get(item.id))]
+        };
+      });
+    },
+    [commit]
+  );
+
+  const deleteProducts = useCallback(
+    (ids) => {
+      const idSet = new Set(ids);
+      return commit((previous) => ({
+        ...previous,
+        products: previous.products.filter((item) => !idSet.has(item.id)),
+        history: previous.history.map((entry) =>
+          entry.productId && idSet.has(entry.productId) ? { ...entry, productId: null } : entry
+        )
+      }));
+    },
+    [commit]
+  );
+
+  const addHistory = useCallback(
+    (entry) =>
+      commit((previous) => ({
+        ...previous,
+        history: [{ id: entry.id || createId('hist'), ...entry }, ...previous.history].slice(0, 60)
+      })),
+    [commit]
+  );
+
+  const setDraft = useCallback(
+    (value) => commit((previous) => ({ ...previous, draft: typeof value === 'function' ? value(previous.draft) : value })),
+    [commit]
+  );
+  const clearDraft = useCallback(() => commit((previous) => (previous.draft ? { ...previous, draft: null } : previous)), [commit]);
 
   const findByUrl = useCallback(
     (url) => {
       const key = normalizeUrlForCompare(url);
       if (!key) return null;
-      return products.find((item) => item.source && item.source.url && normalizeUrlForCompare(item.source.url) === key) || null;
+      return (
+        store.products.find((item) => {
+          const source = item.source || {};
+          return [source.url, source.finalUrl, source.originalUrl]
+            .filter(Boolean)
+            .some((candidate) => normalizeUrlForCompare(candidate) === key);
+        }) || null
+      );
     },
-    [products]
+    [store.products]
+  );
+
+  const findDuplicate = useCallback(
+    (product) => {
+      if (!product) return null;
+      const source = product.source || {};
+      const byUrl = [source.url, source.finalUrl]
+        .filter(Boolean)
+        .map(findByUrl)
+        .find((item) => item && item.id !== product.id);
+      if (byUrl) return byUrl;
+      if (product.productId && source.platform) {
+        return (
+          store.products.find(
+            (item) =>
+              item.id !== product.id &&
+              item.productId &&
+              item.productId.toLowerCase() === product.productId.toLowerCase() &&
+              item.source &&
+              item.source.platform === source.platform
+          ) || null
+        );
+      }
+      return null;
+    },
+    [findByUrl, store.products]
   );
 
   const value = useMemo(
     () => ({
-      products,
-      history,
-      draft,
+      products: store.products,
+      history: store.history,
+      draft: store.draft,
+      persistenceError,
+      clearPersistenceError: () => setPersistenceError(null),
       setDraft,
       clearDraft,
       upsertProduct,
+      upsertProducts,
       deleteProducts,
       addHistory,
-      findByUrl
+      findByUrl,
+      findDuplicate
     }),
-    [products, history, draft, setDraft, clearDraft, upsertProduct, deleteProducts, addHistory, findByUrl]
+    [store, persistenceError, setDraft, clearDraft, upsertProduct, upsertProducts, deleteProducts, addHistory, findByUrl, findDuplicate]
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

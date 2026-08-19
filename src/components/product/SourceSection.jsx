@@ -11,8 +11,8 @@ export function SourceSection({ product, onChange, onRefresh, refreshing }) {
   const href = safeExternalHref(source.url);
   return (
     <Section
-      title="Source and external purchase"
-      description="Where this product comes from and where customers will buy it. The purchase link always leads to the real store."
+      title="Source and affiliate links"
+      description="Keep the clean source URL separate from the optional affiliate purchase link."
       actions={
         <Button variant="secondary" size="sm" icon="refresh" onClick={onRefresh} loading={refreshing} disabled={!source.url}>
           {refreshing ? 'Refreshing' : 'Refresh data'}
@@ -37,10 +37,10 @@ export function SourceSection({ product, onChange, onRefresh, refreshing }) {
           </div>
         </Field>
         <Field
-          label="Purchase URL"
+          label="Source URL"
           htmlFor="field-sourceUrl"
           className="editor-span-2"
-          hint="The external link customers use to buy the product."
+          hint="The clean product page used for duplicate checks and source refreshes."
         >
           <Input
             id="field-sourceUrl"
@@ -48,6 +48,20 @@ export function SourceSection({ product, onChange, onRefresh, refreshing }) {
             value={source.url || ''}
             onChange={(event) => onChange('source', { ...source, url: event.target.value })}
             placeholder="https://store.com/product"
+          />
+        </Field>
+        <Field
+          label="Affiliate URL"
+          htmlFor="field-affiliateUrl"
+          className="editor-span-2"
+          hint="Optional tracked purchase link. It is never used as the canonical product identity."
+        >
+          <Input
+            id="field-affiliateUrl"
+            type="url"
+            value={product.affiliateUrl || ''}
+            onChange={(event) => onChange('affiliateUrl', event.target.value)}
+            placeholder="https://store.com/product?tag=your-affiliate-id"
           />
         </Field>
         <Field label="Product ID" htmlFor="field-productId">

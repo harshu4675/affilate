@@ -27,6 +27,15 @@ export function validateProduct(product) {
     }
   }
 
+  if (product.affiliateUrl) {
+    try {
+      const parsed = new URL(product.affiliateUrl);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') errors.affiliateUrl = 'Affiliate URL must be http or https.';
+    } catch {
+      errors.affiliateUrl = 'Affiliate URL is not valid.';
+    }
+  }
+
   if (!Array.isArray(product.images) || product.images.length === 0) {
     warnings.images = 'This product has no images. You can add one before publishing.';
   }

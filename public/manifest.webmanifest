@@ -1,16 +1,20 @@
 {
-  "name": "Affilate - Affiliate Product Importer",
-  "short_name": "Affilate",
-  "description": "Paste a product URL, extract real product data, review and edit it, and manage your affiliate product library.",
-  "id": "affilate-product-importer",
+  "name": "Talishh - Shop handpicked products and deals",
+  "short_name": "Talishh",
+  "description": "Discover handpicked products and deals from the stores you already love.",
+  "id": "talishh-storefront",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#f7f8fa",
-  "theme_color": "#4f46e5",
+  "background_color": "#f8fafc",
+  "theme_color": "#0f766e",
   "lang": "en",
-  "categories": ["business", "productivity", "shopping"],
+  "categories": [
+    "shopping",
+    "lifestyle",
+    "business"
+  ],
   "icons": [
     {
       "src": "./icons/icon-192.png",

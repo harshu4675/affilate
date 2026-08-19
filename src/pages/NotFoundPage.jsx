@@ -10,7 +10,7 @@ export function NotFoundPage() {
         message="The page you are looking for does not exist."
         action={
           <Link to="/" className="btn btn-primary">
-            Back to dashboard
+            Back to Talishh
           </Link>
         }
       />

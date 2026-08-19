@@ -1,5 +1,6 @@
 import { PlatformBadge, StatusBadge, DiscountBadge } from '../ui/Badge.jsx';
 import { Icon } from '../icons/Icons.jsx';
+import { SafeImage } from '../ui/SafeImage.jsx';
 import { formatCurrency } from '../../utils/format.js';
 import { displayUrl, safeExternalHref } from '../../utils/url.js';
 
@@ -13,7 +14,7 @@ export function ProductPreview({ product }) {
     <div className="product-preview card">
       <div className="preview-image-wrap">
         {primary ? (
-          <img className="preview-image" src={primary.url} alt={primary.alt || product.title || 'Product'} loading="lazy" />
+          <SafeImage className="preview-image" src={primary.url} alt={primary.alt || product.title || 'Product'} />
         ) : (
           <div className="preview-image-placeholder">
             <Icon name="image" size={26} />

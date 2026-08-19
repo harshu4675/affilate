@@ -15,6 +15,8 @@ import './styles/editor.css';
 import './styles/preview.css';
 import './styles/library.css';
 import './styles/responsive.css';
+import './styles/store.css';
+import './styles/admin.css';
 import { App } from './App.jsx';
 
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {

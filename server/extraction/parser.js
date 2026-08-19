@@ -51,37 +51,51 @@ export function ogImageList($, meta = metaMap($)) {
 
 export function jsonLdProducts($) {
   const results = [];
-  $('script[type="application/ld+json"]').each((index, el) => {
-    const raw = $(el).html() || '';
-    if (!raw.trim()) return;
-    let data;
-    try {
-      data = JSON.parse(raw);
-    } catch {
-      return;
-    }
-    collectProducts(data, results, 0);
+  const seen = new Set();
+  $('script[type="application/ld+json" i]').each((index, el) => {
+    const raw = ($(el).html() || '').trim();
+    if (!raw) return;
+    const data = parseJsonLd(raw);
+    if (!data) return;
+    collectProducts(data, results, seen, 0);
   });
   return results;
 }
 
-function collectProducts(node, out, depth) {
-  if (!node || typeof node !== 'object' || depth > 8) return;
+function parseJsonLd(raw) {
+  const sanitized = raw
+    .replace(/^\s*<!--|-->\s*$/g, '')
+    .replace(/^\s*\/\/<!\[CDATA\[|\/\/\]\]>\s*$/g, '')
+    .replace(/;\s*$/, '');
+  const attempts = [raw, sanitized];
+  for (const value of attempts) {
+    try {
+      return JSON.parse(value);
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+function collectProducts(node, out, seen, depth) {
+  if (!node || typeof node !== 'object' || depth > 12 || seen.has(node)) return;
+  seen.add(node);
   if (Array.isArray(node)) {
-    for (const item of node) collectProducts(item, out, depth + 1);
+    for (const item of node) collectProducts(item, out, seen, depth + 1);
     return;
   }
   const type = node['@type'];
   const types = Array.isArray(type) ? type : [type];
-  const isProduct = types.some((t) => typeof t === 'string' && (t === 'Product' || t.endsWith(':Product') || t === 'IndividualProduct'));
+  const isProduct = types.some((entry) => {
+    if (typeof entry !== 'string') return false;
+    const normalized = entry.split(':').pop().toLowerCase();
+    return normalized === 'product' || normalized === 'individualproduct' || normalized === 'productgroup';
+  });
   if (isProduct) out.push(node);
-  if (Array.isArray(node['@graph'])) {
-    for (const item of node['@graph']) collectProducts(item, out, depth + 1);
-  }
-  for (const key of Object.keys(node)) {
-    if (key === '@context' || key === '@type' || key === '@id' || key === '@graph') continue;
-    const value = node[key];
-    if (value && typeof value === 'object') collectProducts(value, out, depth + 1);
+  for (const [key, value] of Object.entries(node)) {
+    if (key === '@context' || key === '@type' || key === '@id') continue;
+    if (value && typeof value === 'object') collectProducts(value, out, seen, depth + 1);
   }
 }
 

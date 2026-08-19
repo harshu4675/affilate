@@ -18,6 +18,13 @@ import { PLATFORMS } from '../constants/platforms.js';
 import { STATUSES, STATUS_LABELS, SORT_OPTIONS } from '../constants/app.js';
 import { safeExternalHref } from '../utils/url.js';
 
+const DATE_PRESETS = [
+  { id: 'any', label: 'Any date' },
+  { id: '7', label: 'Added in last 7 days' },
+  { id: '30', label: 'Added in last 30 days' },
+  { id: '365', label: 'Added in last year' }
+];
+
 const PRICE_PRESETS = [
   { id: 'any', label: 'Any price' },
   { id: '0-25', label: 'Under 25' },
@@ -29,7 +36,7 @@ const PRICE_PRESETS = [
 ];
 
 export function LibraryPage() {
-  const { products, upsertProduct, deleteProducts } = useApp();
+  const { products, upsertProduct, upsertProducts, deleteProducts } = useApp();
   const toast = useToast();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -40,6 +47,7 @@ export function LibraryPage() {
   const [category, setCategory] = useState('');
   const [status, setStatus] = useState(searchParams.get('status') || '');
   const [priceRange, setPriceRange] = useState('any');
+  const [dateRange, setDateRange] = useState('any');
   const [sort, setSort] = useState('newest');
   const [viewMode, setViewMode] = useState('');
   const [selection, setSelection] = useState(() => new Set());
@@ -91,19 +99,24 @@ export function LibraryPage() {
         return true;
       });
     }
+    if (dateRange !== 'any') {
+      const cutoff = Date.now() - Number(dateRange) * 24 * 60 * 60 * 1000;
+      list = list.filter((item) => new Date(item.createdAt || 0).getTime() >= cutoff);
+    }
     const sorters = {
       newest: (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0),
       oldest: (a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0),
       updated: (a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0),
       alpha: (a, b) => (a.title || '').localeCompare(b.title || ''),
+      alpha_desc: (a, b) => (b.title || '').localeCompare(a.title || ''),
       price_asc: (a, b) => (a.price == null ? Infinity : a.price) - (b.price == null ? Infinity : b.price),
       price_desc: (a, b) => (b.price == null ? -Infinity : b.price) - (a.price == null ? -Infinity : a.price)
     };
     list.sort(sorters[sort] || sorters.newest);
     return list;
-  }, [products, debouncedQuery, platform, category, status, priceRange, sort]);
+  }, [products, debouncedQuery, platform, category, status, priceRange, dateRange, sort]);
 
-  const hasFilters = Boolean(query || platform || category || status || priceRange !== 'any');
+  const hasFilters = Boolean(query || platform || category || status || priceRange !== 'any' || dateRange !== 'any');
 
   const clearFilters = () => {
     setQuery('');
@@ -111,6 +124,7 @@ export function LibraryPage() {
     setCategory('');
     setStatus('');
     setPriceRange('any');
+    setDateRange('any');
   };
 
   const toggleSelect = (id) => {
@@ -140,7 +154,11 @@ export function LibraryPage() {
 
   const handleDuplicate = (product) => {
     const copy = duplicateProduct(product);
-    upsertProduct(copy);
+    const saved = upsertProduct(copy);
+    if (!saved.ok) {
+      toast.error(saved.message || 'Product could not be duplicated.');
+      return;
+    }
     toast.success('Product duplicated as a draft.');
   };
 
@@ -158,12 +176,24 @@ export function LibraryPage() {
     if (href) window.open(href, '_blank', 'noopener,noreferrer');
   };
 
+  const handleRefresh = (product) => {
+    if (!product.source || !product.source.url) {
+      toast.error('This product has no source URL to refresh.');
+      return;
+    }
+    navigate(`/products/${product.id}?refresh=1`);
+  };
+
   const handleDeleteOne = (product) => {
     setConfirmDelete({ ids: [product.id], label: product.title || 'Untitled product' });
   };
 
   const confirmBulkDelete = () => {
-    deleteProducts(confirmDelete.ids);
+    const deleted = deleteProducts(confirmDelete.ids);
+    if (!deleted.ok) {
+      toast.error(deleted.message || 'The selected products could not be deleted.');
+      return;
+    }
     toast.success(confirmDelete.ids.length === 1 ? 'Product deleted.' : `${confirmDelete.ids.length} products deleted.`);
     setSelection(new Set());
     setConfirmDelete(null);
@@ -172,9 +202,11 @@ export function LibraryPage() {
   const applyBulkStatus = (nextStatus) => {
     const ids = [...selection];
     const now = new Date().toISOString();
-    products.forEach((item) => {
-      if (ids.includes(item.id)) upsertProduct({ ...item, status: nextStatus, updatedAt: now });
-    });
+    const result = upsertProducts(products.filter((item) => ids.includes(item.id)).map((item) => ({ ...item, status: nextStatus, updatedAt: now })));
+    if (!result.ok) {
+      toast.error(result.message || 'The selected products could not be updated.');
+      return;
+    }
     toast.success(`Status changed to ${STATUS_LABELS[nextStatus]} for ${ids.length} product${ids.length === 1 ? '' : 's'}.`);
     setSelection(new Set());
   };
@@ -187,9 +219,11 @@ export function LibraryPage() {
     }
     const ids = [...selection];
     const now = new Date().toISOString();
-    products.forEach((item) => {
-      if (ids.includes(item.id)) upsertProduct({ ...item, category: value, updatedAt: now });
-    });
+    const result = upsertProducts(products.filter((item) => ids.includes(item.id)).map((item) => ({ ...item, category: value, updatedAt: now })));
+    if (!result.ok) {
+      toast.error(result.message || 'The selected products could not be updated.');
+      return;
+    }
     toast.success(`Category set for ${ids.length} product${ids.length === 1 ? '' : 's'}.`);
     setBulkCategoryOpen(false);
     setBulkCategoryValue('');
@@ -288,6 +322,13 @@ export function LibraryPage() {
                 </option>
               ))}
             </Select>
+            <Select value={dateRange} onChange={(event) => setDateRange(event.target.value)} aria-label="Filter by date added">
+              {DATE_PRESETS.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ))}
+            </Select>
             <Select value={sort} onChange={(event) => setSort(event.target.value)} aria-label="Sort products">
               {SORT_OPTIONS.map((item) => (
                 <option key={item.id} value={item.id}>
@@ -373,7 +414,7 @@ export function LibraryPage() {
               title="No products yet"
               message="Import your first product by pasting a store link on the dashboard."
               action={
-                <Link to="/" className="btn btn-primary">
+                <Link to="/import" className="btn btn-primary">
                   Import a product
                 </Link>
               }
@@ -404,6 +445,7 @@ export function LibraryPage() {
             onDuplicate={handleDuplicate}
             onCopyLink={handleCopyLink}
             onOpenSource={handleOpenSource}
+            onRefresh={handleRefresh}
             onDelete={handleDeleteOne}
           />
           <ProductCardGrid
@@ -415,6 +457,7 @@ export function LibraryPage() {
             onDuplicate={handleDuplicate}
             onCopyLink={handleCopyLink}
             onOpenSource={handleOpenSource}
+            onRefresh={handleRefresh}
             onDelete={handleDeleteOne}
           />
         </div>

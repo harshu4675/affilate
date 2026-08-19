@@ -13,11 +13,11 @@
   --text-secondary: #475467;
   --text-muted: #98a2b3;
 
-  --primary: #4f46e5;
-  --primary-hover: #4338ca;
-  --primary-active: #3730a3;
-  --primary-soft: #eef2ff;
-  --primary-soft-border: #c7d2fe;
+  --primary: #175cd3;
+  --primary-hover: #1849a9;
+  --primary-active: #194185;
+  --primary-soft: #eff8ff;
+  --primary-soft-border: #b2ddff;
 
   --success: #067647;
   --success-soft: #ecfdf3;
@@ -40,7 +40,7 @@
   --muted-soft: #f2f4f7;
   --muted-border: #d0d5dd;
 
-  --focus-ring: rgba(79, 70, 229, 0.28);
+  --focus-ring: rgba(23, 92, 211, 0.24);
 
   --radius-sm: 6px;
   --radius: 10px;
