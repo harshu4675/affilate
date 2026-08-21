@@ -76,3 +76,20 @@ export function displayUrl(url, maxLength = 48) {
   if (cleaned.length <= maxLength) return cleaned;
   return `${cleaned.slice(0, maxLength - 1)}...`;
 }
+
+/**
+ * Resolve the outbound affiliate/store link for a library product.
+ * Same priority the storefront uses: explicit affiliate URL -> original
+ * (tracked) source URL -> clean source URL -> final URL. Returns '' when
+ * there is no safe http(s) link — never invents one.
+ */
+export function resolvePurchaseHref(product) {
+  if (!product || typeof product !== 'object') return '';
+  const source = product.source && typeof product.source === 'object' ? product.source : {};
+  const candidates = [product.affiliateUrl, source.originalUrl, source.url, source.finalUrl];
+  for (const candidate of candidates) {
+    const safe = safeExternalHref(candidate);
+    if (safe) return safe;
+  }
+  return '';
+}

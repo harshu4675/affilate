@@ -21,6 +21,7 @@ import { ProductPreview } from '../components/product/ProductPreview.jsx';
 import { ImageLightbox } from '../components/product/ImageLightbox.jsx';
 import { RefreshDialog } from '../components/product/RefreshDialog.jsx';
 import { DuplicateDialog } from '../components/product/DuplicateDialog.jsx';
+import { PromoteDialog } from '../components/product/PromoteDialog.jsx';
 import { validateProduct } from '../validation/productValidation.js';
 import { createEmptyProduct, duplicateProduct } from '../state/productFactory.js';
 import { extractProduct } from '../services/api.js';
@@ -47,6 +48,7 @@ export function EditorPage() {
   const [refreshRequested, setRefreshRequested] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [lightbox, setLightbox] = useState(null);
+  const [promoteOpen, setPromoteOpen] = useState(false);
 
   const [showDraftNotice, setShowDraftNotice] = useState(false);
   const dirtyRef = useRef(false);
@@ -361,6 +363,9 @@ export function EditorPage() {
           <Button variant="ghost" size="sm" icon="duplicate" onClick={handleDuplicate}>
             Duplicate
           </Button>
+          <Button variant="ghost" size="sm" icon="zap" onClick={() => setPromoteOpen(true)}>
+            Promote
+          </Button>
           {!isNew && (
             <Button variant="ghost" size="sm" icon="trash" onClick={handleDelete} className="btn-danger-text">
               Delete
@@ -514,6 +519,12 @@ export function EditorPage() {
         confirmLabel="Delete product"
         onConfirm={confirmDelete}
         onCancel={() => setConfirmDeleteOpen(false)}
+      />
+
+      <PromoteDialog
+        product={promoteOpen ? product : null}
+        onClose={() => setPromoteOpen(false)}
+        onEdit={() => setPromoteOpen(false)}
       />
 
       {blocker.state === 'blocked' && (

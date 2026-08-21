@@ -9,7 +9,7 @@ import {
   verifyCredentials
 } from '../auth.js';
 import { catalogInfo, getProduct, listProducts, removeProducts, saveProducts, upsertProduct } from './store.js';
-import { ADMIN_EDITABLE_FIELDS, applyAdminPatch, buildCatalogRecord, resolvePurchaseUrl, toPublicProduct } from './model.js';
+import { ADMIN_EDITABLE_FIELDS, applyAdminPatch, buildCatalogRecord, findRelatedProducts, resolvePurchaseUrl, toPublicProduct } from './model.js';
 
 function fail(res, status, code, message) {
   return res.status(status).json({ ok: false, error: { code, message } });
@@ -104,6 +104,16 @@ export function createCatalogRouter({ loginLimiter } = {}) {
     const record = getProduct(req.params.id);
     if (!record || record.visible === false) return fail(res, 404, 'not_found', 'This product is not available.');
     return res.json({ ok: true, data: { product: toPublicProduct(record) } });
+  });
+
+  // Real "you may also like" recommendations from the published catalog.
+  // Returns only products that genuinely exist and share a category, tag,
+  // title, store or price range with this one. Empty when nothing matches.
+  router.get('/products/:id/related', (req, res) => {
+    const record = getProduct(req.params.id);
+    if (!record || record.visible === false) return fail(res, 404, 'not_found', 'This product is not available.');
+    const related = findRelatedProducts(listProducts(), record.id, 8).map(toPublicProduct);
+    return res.json({ ok: true, data: { related } });
   });
 
   router.get('/products/:id/go', (req, res) => {

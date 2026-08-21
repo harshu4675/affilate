@@ -51,22 +51,25 @@ export const amazonAdapter = createAdapter({
       const src = clean(value);
       if (src && /^https?:/i.test(src) && !/sprite|transparent-pixel|grey-pixel/i.test(src)) images.push(src);
     };
-    $('#altImages img').each((index, el) => {
+    const collectFromElement = (el) => {
+      // Highest-quality source first: `data-old-hires` is the full-size image,
+      // `data-a-dynamic-image` holds the responsive set, `src` the small tile.
       addImage($(el).attr('data-old-hires'));
-      addImage($(el).attr('src'));
-    });
-    $('#landingImage, #imgBlkFront, [data-a-image-name="landingImage"]').each((index, el) => {
-      addImage($(el).attr('data-old-hires'));
-      addImage($(el).attr('src'));
       const dynamic = $(el).attr('data-a-dynamic-image');
       if (dynamic) {
         try {
           Object.keys(JSON.parse(dynamic)).forEach(addImage);
         } catch {
-          return;
+          /* not JSON — ignore */
         }
       }
-    });
+      addImage($(el).attr('src'));
+    };
+    // The landing image is the product's primary photo: collect it first so
+    // the ordered image list (and therefore the primary image) matches what
+    // the storefront shows. `#altImages` holds the remaining thumbnails.
+    $('#landingImage, #imgBlkFront, [data-a-image-name="landingImage"]').each((index, el) => collectFromElement(el));
+    $('#altImages img').each((index, el) => collectFromElement(el));
     const ldImages = jsonLdImages(jsonLdProducts($)[0] || {});
     const description =
       textOf($, '#productDescription') ||

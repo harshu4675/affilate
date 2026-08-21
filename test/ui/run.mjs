@@ -129,6 +129,64 @@ if (!publish.ok) {
   process.exit(1);
 }
 
+// Related-products API: real matches only, never the product itself.
+{
+  const knownIds = new Set(seeds.map((seed) => seed.id));
+  let relatedOk = true;
+  let detail = '';
+  for (const seed of seeds) {
+    const res = await fetch(`http://127.0.0.1:${API_PORT}/api/products/${encodeURIComponent(seed.id)}/related`);
+    const body = await res.json().catch(() => null);
+    const related = body && body.ok && Array.isArray(body.data.related) ? body.data.related : null;
+    if (!res.ok || !related) {
+      relatedOk = false;
+      detail = `${seed.id}: HTTP ${res.status}`;
+      break;
+    }
+    if (related.some((item) => item.id === seed.id)) {
+      relatedOk = false;
+      detail = `${seed.id}: includes itself`;
+      break;
+    }
+    if (related.some((item) => !knownIds.has(item.id))) {
+      relatedOk = false;
+      detail = `${seed.id}: unknown product ${related.map((item) => item.id).join(',')}`;
+      break;
+    }
+  }
+  console.log(relatedOk ? 'ok   related: real products only, never self' : `FAIL related: real products only - ${detail}`);
+  if (!relatedOk) process.exit(1);
+
+  // Aurora (generic) and CloudPuff (shopify) share a price range -> match.
+  const auroraRelated = await (await fetch(`http://127.0.0.1:${API_PORT}/api/products/${encodeURIComponent(seeds[0].id)}/related`)).json();
+  const matchesCloudPuff = auroraRelated.data.related.some((item) => item.id === seeds[1].id);
+  console.log(matchesCloudPuff ? 'ok   related: price-range match found' : 'FAIL related: price-range match found');
+  if (!matchesCloudPuff) process.exit(1);
+
+  // Hidden products never surface in recommendations.
+  await fetch(`http://127.0.0.1:${API_PORT}/api/admin/products/bulk`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie },
+    body: JSON.stringify({ action: 'hide', ids: [seeds[1].id] })
+  });
+  const auroraRelatedHidden = await (await fetch(`http://127.0.0.1:${API_PORT}/api/products/${encodeURIComponent(seeds[0].id)}/related`)).json();
+  const stillVisible = !auroraRelatedHidden.data.related.some((item) => item.id === seeds[1].id);
+  console.log(stillVisible ? 'ok   related: hidden products excluded' : 'FAIL related: hidden products excluded');
+  if (!stillVisible) process.exit(1);
+
+  // Unknown id -> 404.
+  const missing = await fetch(`http://127.0.0.1:${API_PORT}/api/products/prod_missing/related`);
+  const missingOk = missing.status === 404;
+  console.log(missingOk ? 'ok   related: unknown product is 404' : `FAIL related: unknown product is 404 - ${missing.status}`);
+  if (!missingOk) process.exit(1);
+  // Restore visibility for the DOM checks.
+  await fetch(`http://127.0.0.1:${API_PORT}/api/admin/products/bulk`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie },
+    body: JSON.stringify({ action: 'show', ids: [seeds[1].id] })
+  });
+}
+
 // 3. Run the jsdom UI checks against this API
 const test = spawn(process.execPath, [path.join(__dirname, 'storefront.dom.mjs')], {
   cwd: root,
@@ -147,6 +205,11 @@ const code = await new Promise((resolve) => test.on('close', resolve));
 // React act() warnings are expected outside a test renderer; keep signal clean.
 for (const line of output.split('\n')) {
   if (/^(ok |FAIL|---|All DOM|\d+ checks|\s+->)/.test(line)) console.log(line);
+}
+if (code !== 0 && output) {
+  // On failure, show the tail of the raw output to make debugging easier.
+  const tail = output.split('\n').slice(-25).join('\n');
+  console.error('\n--- raw output tail ---\n' + tail);
 }
 stop();
 process.exit(code);

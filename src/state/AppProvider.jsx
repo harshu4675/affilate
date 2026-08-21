@@ -80,8 +80,29 @@ export function AppProvider({ children }) {
         products: previous.products.filter((item) => !idSet.has(item.id)),
         history: previous.history.map((entry) =>
           entry.productId && idSet.has(entry.productId) ? { ...entry, productId: null } : entry
-        )
+        ),
+        shortlist: (previous.shortlist || []).filter((id) => !idSet.has(id))
       }));
+    },
+    [commit]
+  );
+
+  const toggleShortlist = useCallback(
+    (id) => {
+      if (!id) return { ok: true };
+      return commit((previous) => {
+        const current = previous.shortlist || [];
+        const shortlist = current.includes(id) ? current.filter((item) => item !== id) : [id, ...current].slice(0, 200);
+        return { ...previous, shortlist };
+      });
+    },
+    [commit]
+  );
+
+  const setShortlist = useCallback(
+    (ids) => {
+      const list = Array.isArray(ids) ? ids.filter((id) => typeof id === 'string' && id).slice(0, 200) : [];
+      return commit((previous) => ({ ...previous, shortlist: list }));
     },
     [commit]
   );
@@ -148,6 +169,7 @@ export function AppProvider({ children }) {
       products: store.products,
       history: store.history,
       draft: store.draft,
+      shortlist: store.shortlist || [],
       persistenceError,
       clearPersistenceError: () => setPersistenceError(null),
       setDraft,
@@ -155,11 +177,26 @@ export function AppProvider({ children }) {
       upsertProduct,
       upsertProducts,
       deleteProducts,
+      toggleShortlist,
+      setShortlist,
       addHistory,
       findByUrl,
       findDuplicate
     }),
-    [store, persistenceError, setDraft, clearDraft, upsertProduct, upsertProducts, deleteProducts, addHistory, findByUrl, findDuplicate]
+    [
+      store,
+      persistenceError,
+      setDraft,
+      clearDraft,
+      upsertProduct,
+      upsertProducts,
+      deleteProducts,
+      toggleShortlist,
+      setShortlist,
+      addHistory,
+      findByUrl,
+      findDuplicate
+    ]
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

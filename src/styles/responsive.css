@@ -182,8 +182,32 @@
     font-size: 20px;
   }
 
+  /* Product image gallery becomes a horizontal swipeable carousel on phones
+     instead of squeezing 8-10 thumbnails into tiny columns. */
   .image-grid {
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    gap: 10px;
+    padding: 2px 2px 8px;
+    margin: 0 -2px;
+    scrollbar-width: thin;
+  }
+
+  .image-grid .image-tile {
+    flex: 0 0 118px;
+    width: 118px;
+    scroll-snap-align: start;
+  }
+
+  .image-grid::-webkit-scrollbar {
+    height: 8px;
+  }
+
+  .image-grid::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 999px;
   }
 
   .extraction-error {

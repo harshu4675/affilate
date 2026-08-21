@@ -54,8 +54,11 @@ function cleanImages(images, platform, baseUrl) {
         continue;
       }
     }
-    const normalized = normalizePlatformImage(url, platform);
-    const key = normalized.replace(/^https?:/i, 'http:');
+    // Amazon CDN URLs are always reduced to the original source, even when
+    // the page itself was detected as "generic" (regional domains, short
+    // links, proxies): the host is the signal, not the product page.
+    const normalized = amazonCdnUrl(url) ? bestAmazonImageUrl(url) : normalizePlatformImage(url, platform);
+    const key = normalized.replace(/^https?:/i, 'http:').toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(normalized);
@@ -64,13 +67,43 @@ function cleanImages(images, platform, baseUrl) {
   return out;
 }
 
-function normalizePlatformImage(url, platform) {
+function amazonCdnUrl(url) {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return host === 'media-amazon.com' || host.endsWith('.media-amazon.com');
+  } catch {
+    return false;
+  }
+}
+
+const AMAZON_IMAGE_EXT = 'jpe?g|png|webp|gif';
+
+/**
+ * Reduce an Amazon image URL to its highest-quality (original) source.
+ *
+ * Amazon serves every size variant of the same photo under a suffix such as
+ * `._SL1500_.`, `._SL500_.`, `._AC_SL1500_.`, `._AC_UL320_.`, `._SY445_.` or
+ * `._CB1234567890_.` (cache buster). The bare URL without any suffix is the
+ * original upload and is always the largest available version, so it is the
+ * one we keep. Stripping only the suffix that sits right before the image
+ * extension makes this safe: it never touches the image id or path segments.
+ */
+export function bestAmazonImageUrl(url) {
+  let next = String(url || '');
+  let previous;
+  const strip = new RegExp(`\\.[A-Z0-9_]+\\.(?:${AMAZON_IMAGE_EXT})$`, 'i');
+  do {
+    previous = next;
+    // `.<VARIANT>.<ext>` -> `.<ext>` (one pass removes the rightmost token;
+    // the loop handles stacked variants such as `._SL1500._SL500_.jpg`)
+    next = next.replace(strip, (match) => match.slice(match.lastIndexOf('.')));
+  } while (next !== previous);
+  return next;
+}
+
+export function normalizePlatformImage(url, platform) {
   if (platform === 'amazon') {
-    return url
-      .replace(/\._[A-Z0-9_]+_[A-Z0-9]+_\./g, '.')
-      .replace(/\._AC_SL\d+_\./g, '.')
-      .replace(/\._SY\d+_\./g, '.')
-      .replace(/\._SX\d+_\./g, '.');
+    return bestAmazonImageUrl(url);
   }
   if (platform === 'etsy') {
     return url

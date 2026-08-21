@@ -9,7 +9,9 @@ import { etsyAdapter } from '../server/extraction/adapters/etsy.js';
 import { aliexpressAdapter } from '../server/extraction/adapters/aliexpress.js';
 import { shopifyAdapter } from '../server/extraction/adapters/shopify.js';
 import { genericAdapter } from '../server/extraction/adapters/generic.js';
-import { normalizeProduct, analyzeCoverage } from '../server/extraction/normalize.js';
+import { normalizeProduct, analyzeCoverage, bestAmazonImageUrl } from '../server/extraction/normalize.js';
+import { normalizeImageUrl, amazonRetryUrl } from '../src/services/imageService.js';
+import { sanitizeProductImages } from '../src/services/storage.js';
 import { runExtraction } from '../server/extraction/pipeline.js';
 import { detectPlatform } from '../server/extraction/detect.js';
 import { normalizeUrl, extractAmazonProductId } from '../server/extraction/url.js';
@@ -49,6 +51,92 @@ check('amazon: availability', amazon.availability === 'In Stock', amazon.availab
 check('amazon: asin', amazon.productId === 'B0TEST1234', amazon.productId);
 check('amazon: image count', amazon.images.length === 2, String(amazon.images.length));
 check('amazon: image normalized', amazon.images[0].includes('_SL1500_') === false, amazon.images[0]);
+check(
+  'amazon: hero image first as original',
+  amazon.images[0] === 'https://m.media-amazon.com/images/I/71aaa.jpg',
+  amazon.images[0]
+);
+check(
+  'amazon: every image is a bare original',
+  amazon.images.every((u) => /\/[A-Za-z0-9]+\.(jpg|jpeg|png|webp|gif)$/i.test(u)),
+  amazon.images.join(' ')
+);
+check(
+  'amazon: no size-variant tokens remain',
+  amazon.images.every((u) => !/\._[A-Z0-9_]+\./i.test(u)),
+  amazon.images.join(' ')
+);
+
+// Amazon URL normalizer: highest-quality (original) source, never the variant.
+check(
+  'best: strips single-token _SL500_',
+  bestAmazonImageUrl('https://m.media-amazon.com/images/I/71x._SL500_.jpg') === 'https://m.media-amazon.com/images/I/71x.jpg',
+  bestAmazonImageUrl('https://m.media-amazon.com/images/I/71x._SL500_.jpg')
+);
+check(
+  'best: strips _AC_UL320_',
+  bestAmazonImageUrl('https://m.media-amazon.com/images/I/71x._AC_UL320_.jpg') === 'https://m.media-amazon.com/images/I/71x.jpg'
+);
+check(
+  'best: strips _SY445_ and _SX446_',
+  bestAmazonImageUrl('https://m.media-amazon.com/images/I/71x._SY445_.jpg') === 'https://m.media-amazon.com/images/I/71x.jpg' &&
+    bestAmazonImageUrl('https://m.media-amazon.com/images/I/71x._SX446_.jpg') === 'https://m.media-amazon.com/images/I/71x.jpg'
+);
+check(
+  'best: strips stacked variants',
+  bestAmazonImageUrl('https://m.media-amazon.com/images/I/71x._SL1500._SL500_.jpg') === 'https://m.media-amazon.com/images/I/71x.jpg'
+);
+check(
+  'best: keeps bare original untouched',
+  bestAmazonImageUrl('https://m.media-amazon.com/images/I/71x.jpg') === 'https://m.media-amazon.com/images/I/71x.jpg'
+);
+check(
+  'best: never touches path segments',
+  bestAmazonImageUrl('https://cdn.example.com/a.b/71x.jpg') === 'https://cdn.example.com/a.b/71x.jpg'
+);
+check(
+  'frontend normalizeImageUrl matches server',
+  normalizeImageUrl('https://m.media-amazon.com/images/I/71x._SL500_.jpg', 'amazon') === bestAmazonImageUrl('https://m.media-amazon.com/images/I/71x._SL500_.jpg')
+);
+check(
+  'frontend retry url for dead amazon variant',
+  amazonRetryUrl('https://m.media-amazon.com/images/I/71x._SL1500_.jpg') === 'https://m.media-amazon.com/images/I/71x.jpg'
+);
+check(
+  'frontend retry url not for other hosts',
+  amazonRetryUrl('https://cdn.example.com/images/71x._SL500_.jpg') === ''
+);
+
+// Legacy data repair: variant URLs collapse to the original, primary kept.
+const legacyProduct = {
+  id: 'prod_legacy_test',
+  title: 'Legacy',
+  source: { platform: 'amazon', url: 'https://www.amazon.com/dp/B0LEGACY123' },
+  images: [
+    { id: 'img1', url: 'https://m.media-amazon.com/images/I/71x._SL500_.jpg', alt: '', position: 0, isPrimary: true, source: 'extracted' },
+    { id: 'img2', url: 'https://m.media-amazon.com/images/I/71x.jpg', alt: '', position: 1, isPrimary: false, source: 'extracted' },
+    { id: 'img3', url: 'https://m.media-amazon.com/images/I/72y._AC_UL320_.jpg', alt: '', position: 2, isPrimary: false, source: 'extracted' }
+  ],
+  removedImages: []
+};
+const repaired = sanitizeProductImages(legacyProduct);
+check(
+  'legacy repair: duplicates collapse to originals',
+  repaired.images.length === 2 &&
+    repaired.images[0].url === 'https://m.media-amazon.com/images/I/71x.jpg' &&
+    repaired.images[1].url === 'https://m.media-amazon.com/images/I/72y.jpg',
+  JSON.stringify(repaired.images.map((image) => image.url))
+);
+check(
+  'legacy repair: primary flag survives',
+  repaired.images.some((image) => image.isPrimary) &&
+    repaired.images.filter((image) => image.isPrimary).length === 1
+);
+check(
+  'legacy repair: non-variant data untouched',
+  sanitizeProductImages({ id: 'p', title: 'x', images: [{ id: 'a', url: 'https://cdn.example.com/i/1.jpg', position: 0 }] }).images[0].url ===
+    'https://cdn.example.com/i/1.jpg'
+);
 
 const ebay = ebayAdapter.extract({ html: fixtures('ebay.html'), url: 'https://www.ebay.com/itm/123456789012', platform: { id: 'ebay' } });
 check('ebay: title', ebay.title === 'Vintage Film Camera Bundle with Lenses', ebay.title);
@@ -123,6 +211,18 @@ const analysis = analyzeCoverage(normalized);
 check('normalize: discount', normalized.discountPercent === 13, String(normalized.discountPercent));
 check('normalize: coverage', analysis.coverage >= 85, String(analysis.coverage));
 check('normalize: productLike', analysis.productLike === true);
+
+// Amazon CDN URLs are reduced to the original even when the page was
+// detected as "generic" (regional domain, short link, proxy).
+const genericAmazonImages = normalizeProduct(
+  { title: 'T', description: 'D', price: 1, images: ['https://m.media-amazon.com/images/I/71z._SL500_.jpg', 'https://m.media-amazon.com/images/I/71z.jpg'] },
+  { platform: 'generic', url: 'https://example.com/p', finalUrl: 'https://example.com/p' }
+).images;
+check(
+  'normalize: generic platform still normalizes amazon CDN urls',
+  genericAmazonImages.length === 1 && genericAmazonImages[0] === 'https://m.media-amazon.com/images/I/71z.jpg',
+  genericAmazonImages.join(' ')
+);
 
 const detection = detectPlatform('https://www.amazon.co.uk/dp/B0TEST');
 check('detect: amazon.co.uk', detection.id === 'amazon', detection.id);
