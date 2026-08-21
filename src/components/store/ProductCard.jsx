@@ -15,7 +15,7 @@ function ProductCardBase({ product, onBuy, eager = false }) {
       <Link to={`/product/${product.id}`} className="pcard-link" aria-label={product.title || 'Product'}>
         <div className="pcard-media">
           <StoreImage src={image ? image.url : ''} alt={image && image.alt ? image.alt : product.title} eager={eager} />
-          {discount != null && discount > 0 && <span className="pcard-discount">{discount}% OFF</span>}
+          {discount != null && discount > 0 && <span className="pcard-discount">{discount}% off</span>}
         </div>
         <div className="pcard-body">
           {product.brand && <p className="pcard-brand">{product.brand}</p>}

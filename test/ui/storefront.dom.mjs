@@ -59,6 +59,38 @@ global.window = new Proxy(window, {
   set: (t, p, v) => Reflect.set(t, p, v)
 });
 
+// Buy now must open the store in a NEW TAB and leave Talishh in this one, so
+// record window.open() calls (and where the opened tab is sent) instead of
+// letting jsdom's unimplemented window.open swallow them.
+let openedTabs = [];
+window.open = (url, target, features) => {
+  const tab = {
+    target,
+    features,
+    initialUrl: String(url || ''),
+    navigatedTo: String(url || '') || null,
+    closed: false,
+    opener: {},
+    location: {
+      replace(next) {
+        tab.navigatedTo = String(next);
+      }
+    },
+    close() {
+      tab.closed = true;
+    }
+  };
+  openedTabs.push(tab);
+  return tab;
+};
+
+// Clipboard fallback for the share test.
+let clipboardText = null;
+Object.defineProperty(window.navigator, 'clipboard', {
+  configurable: true,
+  value: { writeText: async (value) => { clipboardText = String(value); } }
+});
+
 const { mount } = await import('./.build/app-entry.js');
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const text = () => document.body.textContent.replace(/\s+/g, ' ');
@@ -88,6 +120,35 @@ const disabledCta = [...q('.pcard-cta')].filter((b) => b.disabled);
 check('missing-link product has disabled CTA', disabledCta.length === 1, String(disabledCta.length));
 check('result count shown', /\d+ products/.test(text()), text().slice(0, 120));
 
+console.log('\n--- LISTING IMAGES (before opening a product) ---');
+const listingImgs = [...q('.pcard-media img')];
+check('every product card renders an <img>', listingImgs.length === cards.length, `imgs=${listingImgs.length} cards=${cards.length}`);
+check('cards use the real product image URLs', listingImgs.every((img) => /^https?:\/\//.test(img.getAttribute('src') || '')), listingImgs.map((i) => i.getAttribute('src')).join(' '));
+check('no card image is hidden behind a fallback', q('.pcard-media .store-image-fallback').length === 0);
+// A load event must clear the placeholder state.
+listingImgs[0].dispatchEvent(new window.Event('load'));
+await wait(60);
+check('loaded image leaves the loading placeholder', listingImgs[0].closest('.store-image').className.includes('store-image-ready'), listingImgs[0].closest('.store-image').className);
+
+// Regression: images restored from the browser cache are already `complete`
+// when React mounts them, so the load event never fires. The listing must
+// still show them instead of an endless placeholder.
+const imgProto = window.HTMLImageElement.prototype;
+const originalComplete = Object.getOwnPropertyDescriptor(imgProto, 'complete');
+const originalNatural = Object.getOwnPropertyDescriptor(imgProto, 'naturalWidth');
+Object.defineProperty(imgProto, 'complete', { configurable: true, get: () => true });
+Object.defineProperty(imgProto, 'naturalWidth', { configurable: true, get: () => 1200 });
+await go('#/?q=cargo', 1200);
+await go('#/', 1400);
+const cachedWraps = [...q('.pcard-media .store-image')];
+check(
+  'cached (already complete) images render without waiting for onLoad',
+  cachedWraps.length > 0 && cachedWraps.every((el) => el.className.includes('store-image-ready')),
+  cachedWraps.map((el) => el.className).join(' | ')
+);
+if (originalComplete) Object.defineProperty(imgProto, 'complete', originalComplete);
+if (originalNatural) Object.defineProperty(imgProto, 'naturalWidth', originalNatural);
+
 console.log('\n--- SEARCH ---');
 await go('#/?q=blanket', 1200);
 const searchCards = q('.pcard:not(.pcard-skeleton)');
@@ -108,15 +169,35 @@ check('pdp price', q('.pdp-price').length >= 0);
 
 const buyBtn = document.querySelector('.pdp-buy');
 check('buy button enabled for linked product', !buyBtn.disabled);
+openedTabs = [];
+navigatedTo = null;
 buyBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
 await wait(15);
-check('redirect overlay appears immediately', q('.redirect-overlay').length === 1);
+check('new tab opened synchronously on click', openedTabs.length === 1 && openedTabs[0].target === '_blank', JSON.stringify(openedTabs.map((t) => t.target)));
+check('purchase notice appears immediately', q('.redirect-overlay').length === 1);
 check('shows Opening product loader', text().includes('Opening product'), text().slice(-200));
-await wait(600);
+check('notice has a close (X) button', q('.redirect-dismiss').length === 1);
+await wait(700);
 check('shows thanks message', text().includes('Thanks for shopping with Talishh'), text().slice(-220));
-await wait(1200);
-check('redirected to store URL', typeof navigatedTo === 'string' && /^https?:\/\//.test(navigatedTo || ''), String(navigatedTo));
-console.log('     -> redirect target:', navigatedTo);
+const storeTab = openedTabs[0];
+check('store URL sent to the new tab', typeof storeTab.navigatedTo === 'string' && /^https?:\/\//.test(storeTab.navigatedTo || ''), String(storeTab && storeTab.navigatedTo));
+check('Talishh itself never navigated away', navigatedTo === null, String(navigatedTo));
+console.log('     -> new tab target:', storeTab.navigatedTo);
+document.querySelector('.redirect-dismiss').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+await wait(120);
+check('thank-you notice is dismissable with X', q('.redirect-overlay').length === 0);
+
+console.log('\n--- SHARE PRODUCT ---');
+const shareBtn = document.querySelector('.share-product-btn');
+check('share product button on pdp', shareBtn !== null);
+clipboardText = null;
+shareBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+await wait(250);
+check('share falls back to copying the product URL', typeof clipboardText === 'string' && clipboardText.includes(`/product/${pid}`), String(clipboardText));
+check('copy confirmation shown', text().includes('Link copied'), text().slice(-160));
+
+console.log('\n--- FOOTER REMOVED ---');
+check('no storefront footer element', q('.store-footer').length === 0 && document.querySelectorAll('footer').length === 0);
 
 console.log('\n--- PRODUCT GALLERY + RELATED ---');
 await go('#/?q=blanket', 1200);
@@ -175,11 +256,13 @@ await realFetch(API + '/api/admin/products/' + hideMeId, {
   body: JSON.stringify({ visible: false })
 });
 navigatedTo = null;
+openedTabs = [];
 document.querySelector('.pdp-buy').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
 await wait(900);
 const errOverlay = document.querySelector('.redirect-overlay');
 check('error overlay shown for missing link', errOverlay !== null && errOverlay.textContent.includes('Store link unavailable'), 'overlay=' + (errOverlay ? errOverlay.textContent : 'null'));
 check('no redirect happened for broken link', navigatedTo === null, String(navigatedTo));
+check('pending tab closed when the link cannot be resolved', openedTabs.every((tab) => tab.closed && tab.navigatedTo === null), JSON.stringify(openedTabs.map((t) => [t.closed, t.navigatedTo])));
 const backBtn = document.querySelector('.redirect-close');
 backBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
 await wait(300);

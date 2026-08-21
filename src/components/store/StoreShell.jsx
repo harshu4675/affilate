@@ -59,19 +59,6 @@ export function StoreShell() {
       <main className="store-main">
         <Outlet />
       </main>
-
-      <footer className="store-footer">
-        <div className="store-footer-inner">
-          <div className="store-footer-brand">
-            <TalishhLogo size="sm" />
-            <p>{BRAND.tagline}</p>
-          </div>
-          <p className="store-footer-note">{BRAND.supportNote}</p>
-          <p className="store-footer-legal">
-            © {new Date().getFullYear()} {BRAND.name}. Product names, prices and images belong to their respective stores.
-          </p>
-        </div>
-      </footer>
     </div>
   );
 }

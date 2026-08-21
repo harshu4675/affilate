@@ -221,7 +221,7 @@ export function StoreHomePage() {
           {showSkeletons
             ? Array.from({ length: 8 }, (_, index) => <ProductCardSkeleton key={`skeleton-${index}`} />)
             : products.map((product, index) => (
-                <ProductCard key={product.id} product={product} onBuy={buy} eager={index < 4} />
+                <ProductCard key={product.id} product={product} onBuy={buy} eager={index < 6} />
               ))}
         </div>
       )}
