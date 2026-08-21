@@ -18,6 +18,7 @@ global.Event = window.Event;
 global.CustomEvent = window.CustomEvent;
 global.MutationObserver = window.MutationObserver;
 global.getComputedStyle = window.getComputedStyle;
+global.localStorage = window.localStorage;
 global.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 0);
 global.cancelAnimationFrame = clearTimeout;
 window.scrollTo = () => {};
@@ -117,6 +118,24 @@ await wait(1200);
 check('redirected to store URL', typeof navigatedTo === 'string' && /^https?:\/\//.test(navigatedTo || ''), String(navigatedTo));
 console.log('     -> redirect target:', navigatedTo);
 
+console.log('\n--- PRODUCT GALLERY + RELATED ---');
+await go('#/?q=blanket', 1200);
+const blanketLink = [...q('.pcard-link')].find((a) => a.getAttribute('href'));
+await go(blanketLink.getAttribute('href'), 1300);
+check('pdp main image renders', q('.pdp-main-image img').length === 1, String(q('.pdp-main-image img').length));
+check('pdp thumbnails render for multi-image product', q('.pdp-thumb').length >= 2, String(q('.pdp-thumb').length));
+const thumbs = q('.pdp-thumb');
+if (thumbs.length >= 2) {
+  const beforeSrc = q('.pdp-main-image img')[0].getAttribute('src');
+  thumbs[1].dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await wait(80);
+  const afterSrc = q('.pdp-main-image img')[0].getAttribute('src');
+  check('clicking a thumbnail changes the main image', Boolean(beforeSrc) && beforeSrc !== afterSrc, `${beforeSrc} -> ${afterSrc}`);
+}
+check('related section renders real products', q('.pdp-related').length === 1 && q('.related-card').length >= 1, `cards=${q('.related-card').length}`);
+const relatedHrefs = [...q('.related-card')].map((a) => a.getAttribute('href') || '');
+check('related cards link to real product pages', relatedHrefs.length > 0 && relatedHrefs.every((href) => /^#\/product\/.+/.test(href)), relatedHrefs.join(' '));
+
 console.log('\n--- ADMIN GUARD (anonymous) ---');
 await go('#/admin', 1800);
 check('admin shows login form', text().includes('Admin sign in'), text().slice(0,180));
@@ -192,6 +211,83 @@ await go('#/library', 1400);
 check('library page still works', text().includes('Product library'), text().slice(0,160));
 await go('#/import', 1400);
 check('importer dashboard still works', text().includes('Import a product from any store'), text().slice(0,160));
+
+console.log('\n--- LIBRARY: PICK BEST + PROMOTE ---');
+// Seed the local library (what an import would produce) via the storage sync
+// path, then drive the new Pick Best / Promote UI.
+const mkLib = (id, title, over) => ({
+  id, title,
+  shortDescription: '', description: '',
+  brand: '', category: '', subcategory: '', sku: id, productId: id,
+  currency: 'USD', price: null, originalPrice: null, discountPercent: null,
+  availability: '', condition: '', seller: '',
+  images: [], removedImages: [], variants: [], specifications: [], features: [], tags: [],
+  affiliateUrl: '',
+  source: { url: '', originalUrl: '', finalUrl: '', platform: 'generic', platformLabel: 'Store', domain: '', extractedAt: new Date().toISOString(), lastRefreshedAt: '', partial: false, missingFields: [] },
+  status: 'draft', editedFields: [],
+  createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+  ...over
+});
+const libProducts = [
+  mkLib('lib_best', 'Best Product - full data', {
+    price: 20, originalPrice: 40, discountPercent: 50, availability: 'In Stock',
+    brand: 'TestBrand', category: 'Gadgets',
+    description: 'A description that is comfortably long enough to count as a full listing.',
+    images: [1, 2, 3, 4, 5].map((n) => ({ id: `lib_best_img${n}`, url: `https://picsum.photos/seed/libbest${n}/800/600`, alt: '', position: n - 1, isPrimary: n === 1, source: 'extracted' })),
+    affiliateUrl: 'https://example.com/aff?id=lib_best',
+    source: { url: 'https://example.com/p/lib_best', originalUrl: 'https://example.com/aff?id=lib_best', finalUrl: 'https://example.com/p/lib_best', platform: 'generic', platformLabel: 'Store', domain: 'example.com', extractedAt: new Date().toISOString(), lastRefreshedAt: '', partial: false, missingFields: [] }
+  }),
+  mkLib('lib_mid', 'Mid Product - some data', {
+    price: 15, availability: 'In Stock', category: 'Gadgets',
+    shortDescription: 'Short blurb.',
+    description: 'A slightly shorter description.',
+    images: [1, 2].map((n) => ({ id: `lib_mid_img${n}`, url: `https://picsum.photos/seed/libmid${n}/800/600`, alt: '', position: n - 1, isPrimary: n === 1, source: 'extracted' })),
+    source: { url: 'https://example.com/p/lib_mid', originalUrl: '', finalUrl: 'https://example.com/p/lib_mid', platform: 'generic', platformLabel: 'Store', domain: 'example.com', extractedAt: new Date().toISOString(), lastRefreshedAt: '', partial: false, missingFields: [] }
+  }),
+  mkLib('lib_weak', 'Weak Product - almost nothing')
+];
+const libState = JSON.stringify({ version: 2, updatedAt: new Date().toISOString(), data: { products: libProducts, history: [], draft: null, shortlist: [] } });
+window.dispatchEvent(new window.StorageEvent('storage', { key: 'affilate:store:v2', newValue: libState }));
+await wait(500);
+await go('#/library', 1200);
+check('library lists seeded products', q('.product-table tbody tr').length === 3, String(q('.product-table tbody tr').length));
+
+const pickBestBtn = [...q('.library-header-actions .btn')].find((b) => b.textContent.includes('Pick best'));
+check('pick best button present', Boolean(pickBestBtn));
+pickBestBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+await wait(500);
+check('pick best modal ranks all products', q('.pickbest-row').length === 3, String(q('.pickbest-row').length));
+check('best product ranked first', (q('.pickbest-row .pickbest-title')[0] || {}).textContent === 'Best Product - full data', (q('.pickbest-row .pickbest-title')[0] || {}).textContent);
+check('reason chips rendered from real data', q('.pickbest-chip-good').length >= 3, String(q('.pickbest-chip-good').length));
+
+const shortlistTopBtn = [...q('.pickbest-intro-actions .btn')].find((b) => b.textContent.includes('Shortlist top 5'));
+shortlistTopBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+await wait(400);
+check('shortlist top 5 marks rows', q('.pickbest-row-shortlisted').length === 3, String(q('.pickbest-row-shortlisted').length));
+window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+await wait(400);
+check('pick best modal closes', q('.modal').length === 0, String(q('.modal').length));
+
+const shortlistToggle = q('.shortlist-toggle')[0];
+check('shortlist filter appears with count', Boolean(shortlistToggle) && shortlistToggle.textContent.includes('3'), shortlistToggle ? shortlistToggle.textContent : 'missing');
+shortlistToggle.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+await wait(400);
+check('shortlist filter keeps shortlisted rows', q('.product-table tbody tr').length === 3, String(q('.product-table tbody tr').length));
+shortlistToggle.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+await wait(400);
+
+const firstMore = q('.product-table tbody tr .dropdown-trigger')[0];
+firstMore.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+await wait(300);
+const promoteItem = [...q('.menu-item')].find((b) => b.textContent.includes('Promote'));
+check('promote action in row menu', Boolean(promoteItem));
+promoteItem.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+await wait(500);
+check('promote dialog shows the real link', Boolean(q('.promote-link-code')[0]) && q('.promote-link-code')[0].textContent.includes('example.com'), q('.promote-link-code')[0] ? q('.promote-link-code')[0].textContent : 'missing');
+check('promote dialog has copy + open actions', [...q('.promote-actions .btn')].map((b) => b.textContent).join(' ').includes('Copy link') && [...q('.promote-actions .btn')].map((b) => b.textContent).join(' ').includes('Open product'));
+check('promote notes no ad platform is connected', text().includes('No ad platform is connected'));
+window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+await wait(300);
 
 console.log('');
 if (fails) { console.error(fails + ' checks FAILED'); process.exit(1); }

@@ -1,6 +1,7 @@
 import { clean, metaMap, ogImageList, jsonLdProducts, jsonLdImages, specificValues, parsePrice } from '../parser.js';
+import { normalizePlatformImage } from '../normalize.js';
 
-export { specificValues };
+export { specificValues, normalizePlatformImage };
 
 export function createAdapter({ id, label, match, extract }) {
   return { id, label, match, extract };
@@ -101,15 +102,17 @@ export function firstMeta($, names) {
 }
 
 export function normalizedImages(urls, platform) {
-  return uniqueImages(urls).map((url) => normalizePlatformImage(url, platform));
-}
-
-function normalizePlatformImage(url, platform) {
-  if (platform === 'amazon') {
-    return url.replace(/\._[A-Z0-9_]+_[A-Z0-9]+_\./g, '.').replace(/\._AC_SL\d+_\./g, '.');
+  const seen = new Set();
+  const out = [];
+  for (const raw of urls) {
+    const url = clean(raw);
+    if (!url || !/^https?:\/\//i.test(url)) continue;
+    const normalized = normalizePlatformImage(url, platform);
+    const key = normalized.replace(/^https?:/i, 'http:').toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(normalized);
+    if (out.length >= 20) break;
   }
-  if (platform === 'etsy') {
-    return url.replace(/__SX\d+__/g, '__').replace(/__SY\d+__/g, '__').replace(/il_([a-z0-9]+)x([a-z0-9]+)/i, 'il_fullxfull');
-  }
-  return url;
+  return out;
 }

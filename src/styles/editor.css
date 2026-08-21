@@ -184,6 +184,12 @@
   border-radius: var(--radius);
   overflow: hidden;
   background: var(--surface-muted);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.image-tile:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
 }
 
 .image-tile-primary {
@@ -204,7 +210,8 @@
 .image-tile-preview img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  object-position: center;
 }
 
 .image-tile-primary-badge {

@@ -62,6 +62,10 @@ export function fetchStoreProduct(id, options) {
   return request(`/products/${encodeURIComponent(id)}`, options);
 }
 
+export function fetchRelatedProducts(id, options) {
+  return request(`/products/${encodeURIComponent(id)}/related`, options);
+}
+
 export function fetchPurchaseLink(id, options) {
   return request(`/products/${encodeURIComponent(id)}/go`, options);
 }

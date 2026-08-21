@@ -10,7 +10,7 @@ function primaryImage(product) {
   return images.find((image) => image.isPrimary) || images[0] || null;
 }
 
-export function ProductTable({ products, selection, onToggle, onSelectAll, onView, onEdit, onDuplicate, onCopyLink, onOpenSource, onRefresh, onDelete, allSelected }) {
+export function ProductTable({ products, selection, onToggle, onSelectAll, onView, onEdit, onDuplicate, onCopyLink, onOpenSource, onRefresh, onDelete, onPromote, shortlistedIds, onToggleShortlist, allSelected }) {
   return (
     <div className="table-scroll">
       <table className="product-table">
@@ -54,6 +54,11 @@ export function ProductTable({ products, selection, onToggle, onSelectAll, onVie
                   </div>
                   <div className="table-product-main">
                     <button type="button" className="table-title" onClick={() => onView(product)} title={product.title}>
+                      {shortlistedIds && shortlistedIds.has(product.id) && (
+                        <span className="shortlist-star" title="Shortlisted for promotion">
+                          <Icon name="star" size={11} />
+                        </span>
+                      )}
                       {product.title || 'Untitled product'}
                     </button>
                     <div className="table-product-meta">
@@ -95,6 +100,14 @@ export function ProductTable({ products, selection, onToggle, onSelectAll, onVie
                       <IconButton name="dotsVertical" label="More actions" size="sm" />
                     }
                   >
+                    <MenuItem icon="zap" label="Promote / run ad" onClick={() => onPromote && onPromote(product)} />
+                    {onToggleShortlist && (
+                      <MenuItem
+                        icon="star"
+                        label={shortlistedIds && shortlistedIds.has(product.id) ? 'Remove from shortlist' : 'Add to shortlist'}
+                        onClick={() => onToggleShortlist(product.id)}
+                      />
+                    )}
                     <MenuItem icon="refresh" label="Refresh data" onClick={() => onRefresh(product)} />
                     <MenuItem icon="duplicate" label="Duplicate" onClick={() => onDuplicate(product)} />
                     <MenuItem icon="copy" label="Copy source link" onClick={() => onCopyLink(product)} />
@@ -116,7 +129,7 @@ export function ProductTable({ products, selection, onToggle, onSelectAll, onVie
   );
 }
 
-export function ProductCardGrid({ products, selection, onToggle, onView, onEdit, onDuplicate, onCopyLink, onOpenSource, onRefresh, onDelete }) {
+export function ProductCardGrid({ products, selection, onToggle, onView, onEdit, onDuplicate, onCopyLink, onOpenSource, onRefresh, onDelete, onPromote, shortlistedIds, onToggleShortlist }) {
   return (
     <div className="product-cards">
       {products.map((product) => (
@@ -128,6 +141,11 @@ export function ProductCardGrid({ products, selection, onToggle, onView, onEdit,
               <div className="product-card-media-empty">
                 <Icon name="image" size={22} />
               </div>
+            )}
+            {shortlistedIds && shortlistedIds.has(product.id) && (
+              <span className="product-card-shortlist" title="Shortlisted for promotion">
+                <Icon name="star" size={12} />
+              </span>
             )}
             <span className="product-card-check">
               <input
@@ -174,6 +192,14 @@ export function ProductCardGrid({ products, selection, onToggle, onView, onEdit,
               <Dropdown
                 trigger={<IconButton name="dotsVertical" label="More actions" size="sm" />}
               >
+                <MenuItem icon="zap" label="Promote / run ad" onClick={() => onPromote && onPromote(product)} />
+                {onToggleShortlist && (
+                  <MenuItem
+                    icon="star"
+                    label={shortlistedIds && shortlistedIds.has(product.id) ? 'Remove from shortlist' : 'Add to shortlist'}
+                    onClick={() => onToggleShortlist(product.id)}
+                  />
+                )}
                 <MenuItem icon="refresh" label="Refresh data" onClick={() => onRefresh(product)} />
                 <MenuItem icon="duplicate" label="Duplicate" onClick={() => onDuplicate(product)} />
                 <MenuItem icon="copy" label="Copy source link" onClick={() => onCopyLink(product)} />

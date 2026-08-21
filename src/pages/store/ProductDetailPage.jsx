@@ -4,7 +4,7 @@ import { StoreImage } from '../../components/store/StoreImage.jsx';
 import { RedirectOverlay } from '../../components/store/RedirectOverlay.jsx';
 import { Icon } from '../../components/icons/Icons.jsx';
 import { usePurchase } from '../../hooks/usePurchase.js';
-import { fetchStoreProduct } from '../../services/catalogApi.js';
+import { fetchStoreProduct, fetchRelatedProducts } from '../../services/catalogApi.js';
 import { formatPrice } from '../../utils/format.js';
 import { BRAND } from '../../constants/brand.js';
 
@@ -14,12 +14,14 @@ export function ProductDetailPage() {
   const [status, setStatus] = useState('loading');
   const [error, setError] = useState('');
   const [activeImage, setActiveImage] = useState(0);
+  const [related, setRelated] = useState(null);
   const { purchaseState, buy, reset } = usePurchase();
 
   useEffect(() => {
     let active = true;
     setStatus('loading');
     setActiveImage(0);
+    setRelated(null);
     // Clear any overlay left over from a previous product (e.g. the user came
     // back with the browser Back button after a redirect).
     reset();
@@ -34,6 +36,16 @@ export function ProductDetailPage() {
         if (!active) return;
         setError(err && err.code === 'not_found' ? 'This product is no longer available.' : (err && err.message) || 'Could not load this product.');
         setStatus('error');
+      });
+    // Related products are a secondary fetch: failures never break the page.
+    fetchRelatedProducts(id)
+      .then((data) => {
+        if (!active) return;
+        setRelated(Array.isArray(data.related) ? data.related : []);
+      })
+      .catch(() => {
+        if (!active) return;
+        setRelated([]);
       });
     return () => {
       active = false;
@@ -167,6 +179,39 @@ export function ProductDetailPage() {
           </section>
         )}
       </div>
+
+      {related && related.length > 0 && (
+        <section className="pdp-related" aria-label="You may also like">
+          <h2 className="pdp-related-title">You may also like</h2>
+          <div className="pdp-related-row">
+            {related.map((item) => (
+              <Link key={item.id} to={`/product/${item.id}`} className="related-card">
+                <div className="related-card-media">
+                  <StoreImage src={item.images && item.images[0] ? item.images[0].url : ''} alt="" />
+                  {item.discountPercent != null && item.discountPercent > 0 && (
+                    <span className="related-card-discount-badge">{item.discountPercent}% OFF</span>
+                  )}
+                </div>
+                <div className="related-card-body">
+                  <p className="related-card-title">{item.title || 'Untitled product'}</p>
+                  <div className="related-card-price">
+                    {item.price != null ? (
+                      <>
+                        <span className="related-card-amount">{formatPrice(item.price, item.currency)}</span>
+                        {item.originalPrice != null && item.originalPrice > item.price && (
+                          <span className="related-card-mrp">{formatPrice(item.originalPrice, item.currency)}</span>
+                        )}
+                      </>
+                    ) : (
+                      <span className="related-card-missing">Price shown on the store</span>
+                    )}
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       <RedirectOverlay state={purchaseState} onClose={reset} />
     </div>

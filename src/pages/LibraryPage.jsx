@@ -12,6 +12,8 @@ import { EmptyState } from '../components/ui/EmptyState.jsx';
 import { Dropdown, MenuItem } from '../components/ui/Dropdown.jsx';
 import { ProductTable, ProductCardGrid } from '../components/library/ProductTable.jsx';
 import { ViewProductModal } from '../components/library/ViewProductModal.jsx';
+import { PickBestModal } from '../components/library/PickBestModal.jsx';
+import { PromoteDialog } from '../components/product/PromoteDialog.jsx';
 import { duplicateProduct } from '../state/productFactory.js';
 import { exportProductsCsv, exportProductsJson, copyText } from '../services/exportService.js';
 import { PLATFORMS } from '../constants/platforms.js';
@@ -36,10 +38,13 @@ const PRICE_PRESETS = [
 ];
 
 export function LibraryPage() {
-  const { products, upsertProduct, upsertProducts, deleteProducts } = useApp();
+  const { products, upsertProduct, upsertProducts, deleteProducts, shortlist, toggleShortlist, setShortlist } = useApp();
   const toast = useToast();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const [pickBestOpen, setPickBestOpen] = useState(false);
+  const [promoteProduct, setPromoteProduct] = useState(null);
+  const [shortlistedOnly, setShortlistedOnly] = useState(false);
 
   const [query, setQuery] = useState('');
   const debouncedQuery = useDebounce(query, 250);
@@ -103,6 +108,10 @@ export function LibraryPage() {
       const cutoff = Date.now() - Number(dateRange) * 24 * 60 * 60 * 1000;
       list = list.filter((item) => new Date(item.createdAt || 0).getTime() >= cutoff);
     }
+    if (shortlistedOnly) {
+      const shortSet = new Set(shortlist || []);
+      list = list.filter((item) => shortSet.has(item.id));
+    }
     const sorters = {
       newest: (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0),
       oldest: (a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0),
@@ -114,9 +123,11 @@ export function LibraryPage() {
     };
     list.sort(sorters[sort] || sorters.newest);
     return list;
-  }, [products, debouncedQuery, platform, category, status, priceRange, dateRange, sort]);
+  }, [products, debouncedQuery, platform, category, status, priceRange, dateRange, sort, shortlist, shortlistedOnly]);
 
-  const hasFilters = Boolean(query || platform || category || status || priceRange !== 'any' || dateRange !== 'any');
+  const hasFilters = Boolean(
+    query || platform || category || status || priceRange !== 'any' || dateRange !== 'any' || shortlistedOnly
+  );
 
   const clearFilters = () => {
     setQuery('');
@@ -125,6 +136,7 @@ export function LibraryPage() {
     setStatus('');
     setPriceRange('any');
     setDateRange('any');
+    setShortlistedOnly(false);
   };
 
   const toggleSelect = (id) => {
@@ -182,6 +194,20 @@ export function LibraryPage() {
       return;
     }
     navigate(`/products/${product.id}?refresh=1`);
+  };
+
+  const handlePromote = (product) => {
+    setPromoteProduct(product);
+  };
+
+  const handleShortlistToggle = (id) => {
+    const wasListed = (shortlist || []).includes(id);
+    toggleShortlist(id);
+    toast.success(wasListed ? 'Removed from shortlist.' : 'Added to shortlist.');
+  };
+
+  const handleShortlistTop = (ids) => {
+    setShortlist(ids);
   };
 
   const handleDeleteOne = (product) => {
@@ -267,10 +293,15 @@ export function LibraryPage() {
             {products.length} product{products.length === 1 ? '' : 's'} in your library
           </p>
         </div>
-        <Link to="/products/new" className="btn btn-primary btn-sm">
-          <Icon name="plus" size={14} />
-          Import product
-        </Link>
+        <div className="library-header-actions">
+          <Button variant="secondary" size="sm" icon="star" onClick={() => setPickBestOpen(true)} disabled={products.length === 0}>
+            Pick best
+          </Button>
+          <Link to="/products/new" className="btn btn-primary btn-sm">
+            <Icon name="plus" size={14} />
+            Import product
+          </Link>
+        </div>
       </div>
 
       <div className="library-toolbar card">
@@ -337,6 +368,18 @@ export function LibraryPage() {
               ))}
             </Select>
           </div>
+          {(shortlist || []).length > 0 && (
+            <button
+              type="button"
+              className={`shortlist-toggle${shortlistedOnly ? ' shortlist-toggle-active' : ''}`}
+              onClick={() => setShortlistedOnly((value) => !value)}
+              title="Show only shortlisted products"
+            >
+              <Icon name="star" size={13} />
+              Shortlisted
+              <span className="shortlist-toggle-count">{(shortlist || []).length}</span>
+            </button>
+          )}
           <div className="toolbar-view">
             <IconButton
               name="list"
@@ -447,6 +490,9 @@ export function LibraryPage() {
             onOpenSource={handleOpenSource}
             onRefresh={handleRefresh}
             onDelete={handleDeleteOne}
+            onPromote={handlePromote}
+            shortlistedIds={new Set(shortlist || [])}
+            onToggleShortlist={handleShortlistToggle}
           />
           <ProductCardGrid
             products={filtered}
@@ -459,6 +505,9 @@ export function LibraryPage() {
             onOpenSource={handleOpenSource}
             onRefresh={handleRefresh}
             onDelete={handleDeleteOne}
+            onPromote={handlePromote}
+            shortlistedIds={new Set(shortlist || [])}
+            onToggleShortlist={handleShortlistToggle}
           />
         </div>
       )}
@@ -517,6 +566,29 @@ export function LibraryPage() {
           </datalist>
         </div>
       </Modal>
+
+      <PickBestModal
+        open={pickBestOpen}
+        onClose={() => setPickBestOpen(false)}
+        products={products}
+        shortlist={shortlist || []}
+        onToggleShortlist={handleShortlistToggle}
+        onShortlistTop={handleShortlistTop}
+        onEdit={(product) => {
+          setPickBestOpen(false);
+          handleEdit(product);
+        }}
+      />
+
+      <PromoteDialog
+        product={promoteProduct}
+        onClose={() => setPromoteProduct(null)}
+        onEdit={() => {
+          const product = promoteProduct;
+          setPromoteProduct(null);
+          if (product) handleEdit(product);
+        }}
+      />
     </div>
   );
 }

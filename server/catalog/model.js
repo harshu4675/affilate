@@ -7,7 +7,7 @@
  * adds storefront-only state (visibility, publish timestamps).
  */
 
-const MAX_IMAGES = 6;
+const MAX_IMAGES = 12;
 const MAX_TEXT = 400;
 const MAX_DESCRIPTION = 4000;
 const MAX_LIST = 20;
@@ -193,6 +193,71 @@ export function applyAdminPatch(record, patch) {
   next.purchaseUrl = resolvePurchaseUrl(next);
   next.updatedAt = new Date().toISOString();
   return next;
+}
+
+const TITLE_STOPWORDS = new Set([
+  'the', 'and', 'for', 'with', 'from', 'into', 'your', 'our', 'its', 'his', 'her',
+  'new', 'pack', 'size', 'color', 'colour', 'high', 'low', 'set', 'pcs', 'piece',
+  'pieces', 'men', 'women', 'women\'s', 'men\'s', 'unisex', 'one', 'all', 'any',
+  'by', 'of', 'in', 'on', 'at', 'to', 'a', 'an', 'is', 'it'
+]);
+
+function titleTokens(value) {
+  return new Set(
+    String(value || '')
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((token) => token.length >= 3 && !TITLE_STOPWORDS.has(token))
+  );
+}
+
+function relatedScore(candidate, self) {
+  if (!candidate || !self || candidate.id === self.id) return 0;
+  let score = 0;
+  const categoryOf = (item) => String(item.category || '').trim().toLowerCase();
+  const subcategoryOf = (item) => String(item.subcategory || '').trim().toLowerCase();
+  const selfCategory = categoryOf(self);
+  if (selfCategory && categoryOf(candidate) === selfCategory) score += 4;
+  const selfSubcategory = subcategoryOf(self);
+  if (selfSubcategory && subcategoryOf(candidate) === selfSubcategory) score += 2;
+  const selfTags = new Set((self.tags || []).map((tag) => String(tag).trim().toLowerCase()).filter(Boolean));
+  let sharedTags = 0;
+  for (const tag of new Set((candidate.tags || []).map((item) => String(item).trim().toLowerCase()).filter(Boolean))) {
+    if (selfTags.has(tag)) sharedTags += 1;
+  }
+  if (sharedTags > 0) score += Math.min(4, sharedTags * 2);
+  const sharedTokens = [...titleTokens(candidate.title)].filter((token) => titleTokens(self.title).has(token));
+  if (sharedTokens.length > 0) score += Math.min(3, sharedTokens.length);
+  if (self.source && candidate.source && self.source.platform === candidate.source.platform && self.source.platform !== 'generic') {
+    score += 1;
+  }
+  if (candidate.price != null && self.price != null && candidate.price > 0 && self.price > 0) {
+    const ratio = candidate.price / self.price;
+    if (ratio >= 0.5 && ratio <= 2) score += 1;
+  }
+  return score;
+}
+
+/**
+ * Recommend real catalog products similar to `selfId`, using only data that
+ * actually exists (category, subcategory, tags, title, store, price range).
+ * Returns up to `limit` records, best match first. Empty array when nothing
+ * genuinely matches — never padded with unrelated items.
+ */
+export function findRelatedProducts(records, selfId, limit = 8) {
+  const self = (records || []).find((item) => item && item.id === selfId);
+  if (!self) return [];
+  const scored = (records || [])
+    .filter((item) => item && item.id !== selfId && item.visible !== false)
+    .map((item) => ({ item, score: relatedScore(item, self) }))
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      const discount = (b.item.discountPercent || 0) - (a.item.discountPercent || 0);
+      if (discount !== 0) return discount;
+      return new Date(b.item.publishedAt || 0) - new Date(a.item.publishedAt || 0);
+    });
+  return scored.slice(0, limit).map((entry) => entry.item);
 }
 
 /** Public projection served to storefront visitors. */

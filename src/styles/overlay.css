@@ -198,10 +198,20 @@
   overflow: hidden;
 }
 
+.lightbox .lightbox-safe {
+  flex: 1;
+  min-height: 320px;
+  max-height: 60vh;
+}
+
+/* Never upscale: the photo renders at natural size, shrunk to fit the box. */
 .lightbox-image {
+  width: auto;
+  height: auto;
   max-width: 100%;
   max-height: 60vh;
   object-fit: contain;
+  object-position: center;
 }
 
 .lightbox-footer {

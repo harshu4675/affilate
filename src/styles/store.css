@@ -813,6 +813,24 @@
   overflow: hidden;
 }
 
+/* Main product photo: centered, never upscaled beyond its natural size,
+   never stretched. Small sources render at a sensible size, large ones
+   shrink to fit the square frame. */
+.pdp-main-image .store-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pdp-main-image .store-image img {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  object-position: center;
+}
+
 .pdp-discount {
   top: 12px;
   left: 12px;
@@ -825,6 +843,8 @@
   overflow-x: auto;
   padding-bottom: 4px;
   scrollbar-width: thin;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
 }
 
 .pdp-thumb {
@@ -837,6 +857,12 @@
   background: var(--t-surface);
   overflow: hidden;
   cursor: pointer;
+  scroll-snap-align: center;
+  transition: border-color 0.15s ease;
+}
+
+.pdp-thumb:hover {
+  border-color: var(--t-teal);
 }
 
 .pdp-thumb-active {
@@ -1028,6 +1054,110 @@
 
 .pdp-loading .pdp-info {
   gap: 12px;
+}
+
+/* ----------------------------------------------------------- related */
+
+.pdp-related {
+  margin-top: 30px;
+}
+
+.pdp-related-title {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--t-ink);
+}
+
+.pdp-related-row {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 6px;
+  scrollbar-width: thin;
+}
+
+.related-card {
+  flex: 0 0 150px;
+  display: flex;
+  flex-direction: column;
+  background: var(--t-surface);
+  border: 1px solid var(--t-line);
+  border-radius: var(--t-radius);
+  overflow: hidden;
+  text-decoration: none;
+  color: inherit;
+  scroll-snap-align: start;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.related-card:hover {
+  border-color: var(--t-teal);
+  box-shadow: var(--t-shadow-md);
+  transform: translateY(-2px);
+}
+
+.related-card-media {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  background: #f1f5f9;
+}
+
+.related-card-discount-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: var(--t-coral);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 3px 6px;
+  border-radius: 6px;
+}
+
+.related-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 9px 10px 11px;
+}
+
+.related-card-title {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--t-ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.related-card-price {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.related-card-amount {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--t-ink);
+}
+
+.related-card-mrp {
+  font-size: 11px;
+  color: var(--t-muted);
+  text-decoration: line-through;
+}
+
+.related-card-missing {
+  font-size: 11px;
+  color: var(--t-muted);
 }
 
 /* ----------------------------------------------------------- footer */
