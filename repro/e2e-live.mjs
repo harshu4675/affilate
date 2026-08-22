@@ -4,7 +4,7 @@
 //         catalog publish -> public product (all images) -> related products.
 import { amazonAdapter } from '../server/extraction/adapters/amazon.js';
 import { normalizeProduct } from '../server/extraction/normalize.js';
-import { createProductFromExtraction } from '../src/state/productFactory.js';
+import { createProductFromExtraction } from '../client/src/state/productFactory.js';
 
 const API = 'http://127.0.0.1:8787';
 let failures = 0;

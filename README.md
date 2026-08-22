@@ -72,10 +72,22 @@ npm install
 npm run dev
 ```
 
+Client and server are separate packages and can be run independently:
+
+```bash
+cd client
+npm run dev
+```
+
+```bash
+cd server
+npm run dev
+```
+
 - Storefront: http://localhost:5173
 - Admin panel: http://localhost:5173/#/admin
 - Importer workspace: http://localhost:5173/#/import
-- API: http://localhost:8787 (proxied to the app as `/api`)
+- API: http://localhost:8787 (proxied from the Vite app as `/api`)
 
 Default development admin credentials are `admin` / `talishh-admin`. **Set `ADMIN_USERNAME` and
 `ADMIN_PASSWORD` before deploying** - the server logs a warning while the default is in use, and the
@@ -86,8 +98,8 @@ In development the extraction service allows local/private URLs and a higher rat
 ## Production
 
 ```bash
-npm run build   # production frontend into dist/
-npm start       # Express serves dist/ + extraction API on :8787
+npm run build   # production frontend into client/dist/
+npm start       # Express serves client/dist/ + extraction API on :8787
 ```
 
 Or one shot:
@@ -104,13 +116,13 @@ Production hardening is enabled automatically: private/internal IPs are blocked 
 
 | Script | Description |
 | --- | --- |
-| `npm run dev` | Vite dev server + extraction API (concurrently) |
-| `npm run dev:web` | Vite only |
-| `npm run dev:api` | Extraction API only |
+| `npm run dev` | Vite client + extraction API (concurrently) |
+| `npm run dev:client` / `npm run dev:web` | Client only (`cd client && npm run dev`) |
+| `npm run dev:server` / `npm run dev:api` | API only (`cd server && npm run dev`) |
 | `npm test` | Extraction pipeline test suite (adapter fixtures + API behavior) |
 | `npm run test:ui` | Storefront + admin UI test suite (real app in jsdom against a live API) |
 | `npm run test:all` | Both suites |
-| `npm run build` | Production frontend build |
+| `npm run build` | Production frontend build (`client/dist`) |
 | `npm start` | Production server (frontend + API) |
 | `npm run serve` | Build then start |
 
@@ -118,7 +130,7 @@ Production hardening is enabled automatically: private/internal IPs are blocked 
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `VITE_API_BASE` | `/api` | API base path used by the frontend |
+| `VITE_API_BASE` | `/api` | Client-only API base path (Vite). Never use `VITE_*` for secrets |
 | `PORT` | `8787` | Production server port |
 | `AFFILATE_RATE_MAX` | `30` (dev: `120`) | Extraction requests per minute per IP |
 | `AFFILATE_DEV` | unset | Set to `1` by `npm run dev` to allow local URLs and higher limits |
@@ -138,21 +150,26 @@ In development, diagnostics are available at `GET /api/debug/extractions`. The e
 ## Architecture
 
 ```
-src/
-  components/      reusable UI, layout, extractor, product editor, library
-    store/         Talishh storefront: logo, product card, image, redirect overlay, shell
-    admin/         admin shell (sidebar) and product edit drawer
-  pages/           Dashboard, Library, Editor, NotFound
-    store/         storefront home + product detail
-    admin/         admin login, dashboard, products, import & publish
-  state/           AppProvider (products, history, draft) + product factory
-  services/        api, storage, export, image helpers
-  hooks/           debounce, autosave, api health, keyboard shortcuts, extraction
-  extraction/      URL validation, platform detection, error catalog
-  validation/      product validation
-  constants/       platforms, statuses, currencies
-  utils/           ids, formatting, URL handling, product merge (refresh)
-  styles/          design tokens + component styles (external CSS)
+client/
+  src/
+    components/      reusable UI, layout, extractor, product editor, library
+      store/         Talishh storefront: logo, product card, image, redirect overlay, shell
+      admin/         admin shell (sidebar) and product edit drawer
+    pages/           Dashboard, Library, Editor, NotFound
+      store/         storefront home + product detail
+      admin/         admin login, dashboard, products, import & publish
+    state/           AppProvider (products, history, draft) + product factory
+    services/        api, storage, export, image helpers
+    hooks/           debounce, autosave, api health, keyboard shortcuts, extraction
+    extraction/      URL validation, platform detection, error catalog
+    validation/      product validation
+    constants/       platforms, statuses, currencies
+    utils/           ids, formatting, URL handling, product merge (refresh)
+    styles/          design tokens + component styles (external CSS)
+  public/            PWA manifest, service worker, icons
+  index.html
+  vite.config.js     Vite dev server + /api proxy to the backend
+  package.json
 server/
   index.js         Express API (health, extract, catalog, static hosting in prod)
   auth.js          admin session tokens, cookies and route guard
@@ -160,6 +177,7 @@ server/
     model.js       library product -> storefront catalog projection, purchase URL resolution
     store.js       atomic JSON catalog persistence
     routes.js      public catalog + protected admin endpoints
+  data/            storefront catalog file (gitignored JSON)
   security.js      SSRF / URL safety checks
   rateLimit.js     in-memory sliding window limiter
   extraction/
@@ -171,6 +189,7 @@ server/
     normalize.js   raw -> normalized product model, image cleanup and coverage analysis
     adapters/      base + amazon, ebay, walmart, etsy, aliexpress, shopify, generic
     pipeline.js    validation -> safe redirects -> layered extraction -> normalization -> diagnostics
+  package.json
 test/
   fixtures/        mock store HTML for every adapter
   mock-server.mjs  static server + Shopify product JSON endpoint

@@ -1,14 +1,15 @@
-import "dotenv/config";
 import express from "express";
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
+import dotenv from "dotenv";
 import { runExtraction } from "./extraction/pipeline.js";
 import { createRateLimiter } from "./rateLimit.js";
 import { createCatalogRouter } from "./catalog/routes.js";
 import { adminCredentials } from "./auth.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.join(__dirname, ".env") });
 const isDev = process.env.AFFILATE_DEV === "1";
 const PORT = Number(process.env.PORT || 8787);
 const RATE_MAX = Number(process.env.AFFILATE_RATE_MAX || (isDev ? 120 : 30));
@@ -146,7 +147,7 @@ function statusForCode(code) {
   return map[code] || 400;
 }
 
-const distPath = path.join(__dirname, "..", "dist");
+const distPath = path.join(__dirname, "..", "client", "dist");
 if (!isDev && fs.existsSync(distPath)) {
   app.use(express.static(distPath));
   app.get(/^\/(?!api\/).*/, (req, res) => {

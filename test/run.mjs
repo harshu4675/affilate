@@ -10,14 +10,14 @@ import { aliexpressAdapter } from '../server/extraction/adapters/aliexpress.js';
 import { shopifyAdapter } from '../server/extraction/adapters/shopify.js';
 import { genericAdapter } from '../server/extraction/adapters/generic.js';
 import { normalizeProduct, analyzeCoverage, bestAmazonImageUrl } from '../server/extraction/normalize.js';
-import { normalizeImageUrl, amazonRetryUrl } from '../src/services/imageService.js';
-import { sanitizeProductImages } from '../src/services/storage.js';
+import { normalizeImageUrl, amazonRetryUrl } from '../client/src/services/imageService.js';
+import { sanitizeProductImages } from '../client/src/services/storage.js';
 import { runExtraction } from '../server/extraction/pipeline.js';
 import { detectPlatform } from '../server/extraction/detect.js';
 import { normalizeUrl, extractAmazonProductId } from '../server/extraction/url.js';
 import { fetchJson } from '../server/extraction/fetch.js';
-import { createProductFromExtraction } from '../src/state/productFactory.js';
-import { loadAppState, saveAppState } from '../src/services/storage.js';
+import { createProductFromExtraction } from '../client/src/state/productFactory.js';
+import { loadAppState, saveAppState } from '../client/src/services/storage.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixtures = (name) => fs.readFileSync(path.join(__dirname, 'fixtures', name), 'utf8');
