@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Icon } from '../icons/Icons.jsx';
 import { amazonRetryUrl } from '../../services/imageService.js';
 
@@ -7,6 +7,7 @@ export function SafeImage({ src, alt = '', className = '', imageClassName = '', 
   // Normally identical to `src`. If the URL 404s and a safer original exists
   // (e.g. an Amazon size-variant URL), we retry once with that URL.
   const [effectiveSrc, setEffectiveSrc] = useState(src);
+  const imgRef = useRef(null);
 
   useEffect(() => {
     setEffectiveSrc(src);
@@ -29,11 +30,21 @@ export function SafeImage({ src, alt = '', className = '', imageClassName = '', 
     if (onError) onError(event);
   };
 
+  // Images restored from cache can complete before React attaches onLoad, so
+  // the event never fires. Read the real state off the DOM node instead of
+  // leaving the placeholder up forever.
+  const sync = useCallback((node) => {
+    imgRef.current = node;
+    if (!node || !node.getAttribute('src') || !node.complete) return;
+    if (node.naturalWidth > 0) setStatus('ready');
+  }, []);
+
   return (
     <span className={`safe-image safe-image-${status} ${className}`.trim()}>
       {effectiveSrc && status !== 'error' ? (
         <img
           {...rest}
+          ref={sync}
           className={imageClassName}
           src={effectiveSrc}
           alt={alt}

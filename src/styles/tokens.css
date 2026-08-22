@@ -1,23 +1,23 @@
 :root {
   --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 
-  --bg: #f7f8fa;
+  --bg: #fbfbfa;
   --surface: #ffffff;
-  --surface-muted: #f2f4f7;
-  --surface-hover: #f9fafb;
+  --surface-muted: #f6f6f5;
+  --surface-hover: #f7f7f6;
 
-  --border: #e4e7ec;
-  --border-strong: #d0d5dd;
+  --border: #e6e6e5;
+  --border-strong: #d3d3d2;
 
-  --text: #101828;
-  --text-secondary: #475467;
-  --text-muted: #98a2b3;
+  --text: #17181a;
+  --text-secondary: #55585d;
+  --text-muted: #a6aaaf;
 
-  --primary: #175cd3;
-  --primary-hover: #1849a9;
-  --primary-active: #194185;
-  --primary-soft: #eff8ff;
-  --primary-soft-border: #b2ddff;
+  --primary: #17181a;
+  --primary-hover: #000000;
+  --primary-active: #000000;
+  --primary-soft: #f3f3f2;
+  --primary-soft-border: #dededd;
 
   --success: #067647;
   --success-soft: #ecfdf3;
@@ -32,15 +32,15 @@
   --danger-soft: #fef3f2;
   --danger-border: #fecdca;
 
-  --info: #175cd3;
-  --info-soft: #eff8ff;
-  --info-border: #b2ddff;
+  --info: #3f4246;
+  --info-soft: #f3f3f2;
+  --info-border: #dededd;
 
-  --muted: #667085;
-  --muted-soft: #f2f4f7;
-  --muted-border: #d0d5dd;
+  --muted: #83878d;
+  --muted-soft: #f6f6f5;
+  --muted-border: #d3d3d2;
 
-  --focus-ring: rgba(23, 92, 211, 0.24);
+  --focus-ring: rgba(23, 24, 26, 0.18);
 
   --radius-sm: 6px;
   --radius: 10px;
