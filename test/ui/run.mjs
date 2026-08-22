@@ -88,7 +88,7 @@ globalThis.localStorage = {
   removeItem: (key) => memory.delete(key)
 };
 const { runExtraction } = await import(path.join(root, 'server', 'extraction', 'pipeline.js'));
-const { createProductFromExtraction } = await import(path.join(root, 'src', 'state', 'productFactory.js'));
+const { createProductFromExtraction } = await import(path.join(root, 'client', 'src', 'state', 'productFactory.js'));
 
 const seeds = [];
 for (const url of [
